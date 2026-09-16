@@ -64,43 +64,126 @@ def state():
 
 @app.post("/api/upload")
 def upload():
-    f = request.files.get("file")
-    if not f: return jsonify(error="No file supplied"), 400
-    data = f.read()
-    chunk_size = 64 * 1024
-    hashes = []
-    for i in range(0, len(data), chunk_size):
-        chunk = data[i:i+chunk_size]
-        h = sha256(chunk)
-        hashes.append(h)
-        existing = supabase.table("ledger_blocks").select("hash,ref_count").eq("hash", h).maybe_single().execute().data
-        if existing:
-            supabase.table("ledger_blocks").update({"ref_count": int(existing["ref_count"])+1}).eq("hash",h).execute()
-        else:
-            supabase.storage.from_(BUCKET).upload(h, chunk, {"content-type":"application/octet-stream"})
-            supabase.table("ledger_blocks").insert({
-                "hash": h, "size": len(chunk), "ref_count": 1, "corrupted": False
-            }).execute()
-    # Empty files still get a content-addressed block.
-    if not hashes:
-        h=sha256(b""); hashes=[h]
-        existing=supabase.table("ledger_blocks").select("hash,ref_count").eq("hash",h).maybe_single().execute().data
-        if existing:
-            supabase.table("ledger_blocks").update({"ref_count": int(existing["ref_count"])+1}).eq("hash",h).execute()
-        else:
-            supabase.storage.from_(BUCKET).upload(h,b"",{"content-type":"application/octet-stream"})
-            supabase.table("ledger_blocks").insert({"hash":h,"size":0,"ref_count":1,"corrupted":False}).execute()
+    try:
+        f = request.files.get("file")
 
-    count = len(get_files()) + 1
-    path = f"/uploads/{count:02d}-{f.filename.replace(' ','_')}"
-    entry = {
-        "name": f.filename, "path": path, "size": len(data),
-        "blocks": len(hashes), "block_hashes": hashes,
-        "merkle_root": merkle_root(hashes), "status": "unverified"
-    }
-    supabase.table("ledger_files").insert(entry).execute()
-    return jsonify(entry)
+        if not f:
+            return jsonify(error="No file supplied"), 400
 
+        data = f.read()
+        chunk_size = 64 * 1024
+        hashes = []
+
+        for i in range(0, len(data), chunk_size):
+            chunk = data[i:i + chunk_size]
+            h = sha256(chunk)
+            hashes.append(h)
+
+            existing = (
+                supabase
+                .table("ledger_blocks")
+                .select("hash,ref_count")
+                .eq("hash", h)
+                .maybe_single()
+                .execute()
+                .data
+            )
+
+            if existing:
+                supabase.table("ledger_blocks").update({
+                    "ref_count": int(existing["ref_count"]) + 1
+                }).eq("hash", h).execute()
+
+            else:
+                # Upload block to Supabase Storage
+                supabase.storage.from_(BUCKET).upload(
+                    h,
+                    chunk,
+                    {
+                        "content-type": "application/octet-stream",
+                        "upsert": "true"
+                    }
+                )
+
+                # Save block information
+                supabase.table("ledger_blocks").insert({
+                    "hash": h,
+                    "size": len(chunk),
+                    "ref_count": 1,
+                    "corrupted": False
+                }).execute()
+
+        # Handle empty files
+        if not hashes:
+            h = sha256(b"")
+            hashes = [h]
+
+            existing = (
+                supabase
+                .table("ledger_blocks")
+                .select("hash,ref_count")
+                .eq("hash", h)
+                .maybe_single()
+                .execute()
+                .data
+            )
+
+            if existing:
+                supabase.table("ledger_blocks").update({
+                    "ref_count": int(existing["ref_count"]) + 1
+                }).eq("hash", h).execute()
+
+            else:
+                supabase.storage.from_(BUCKET).upload(
+                    h,
+                    b"",
+                    {
+                        "content-type": "application/octet-stream",
+                        "upsert": "true"
+                    }
+                )
+
+                supabase.table("ledger_blocks").insert({
+                    "hash": h,
+                    "size": 0,
+                    "ref_count": 1,
+                    "corrupted": False
+                }).execute()
+
+        count = len(get_files()) + 1
+
+        filename = f.filename or "unnamed_file"
+        safe_filename = filename.replace(" ", "_")
+
+        path = f"/uploads/{count:02d}-{safe_filename}"
+
+        entry = {
+            "name": filename,
+            "path": path,
+            "size": len(data),
+            "blocks": len(hashes),
+            "block_hashes": hashes,
+            "merkle_root": merkle_root(hashes),
+            "status": "unverified"
+        }
+
+        # Save file record
+        result = (
+            supabase
+            .table("ledger_files")
+            .insert(entry)
+            .execute()
+        )
+
+        return jsonify(entry)
+
+    except Exception as e:
+        print("UPLOAD ERROR:", repr(e))
+
+        return jsonify({
+            "error": "Upload failed",
+            "details": str(e)
+        }), 500
 @app.post("/api/verify")
 def verify():
     path=request.json["path"]
