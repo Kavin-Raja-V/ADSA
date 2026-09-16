@@ -38,7 +38,7 @@ def get_blocks():
 
 @app.get("/")
 def home():
-    return send_from_directory(os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend"), "index.html")
+    return send_from_directory(os.path.join(os.path.dirname(__file__), "frontend"), "index.html")
 
 @app.get("/api/state")
 def state():
