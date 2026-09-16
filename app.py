@@ -7,10 +7,6 @@ from flask import Flask, jsonify, request, send_from_directory
 from supabase import create_client
 
 
-# =========================================================
-# CONFIGURATION
-# =========================================================
-
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip()
 
 SUPABASE_KEY = (
@@ -26,10 +22,13 @@ SUPABASE_BUCKET = os.environ.get(
 CHUNK_SIZE = 64 * 1024
 
 
-if not SUPABASE_URL or not SUPABASE_KEY:
+if not SUPABASE_URL:
+    raise RuntimeError("Missing SUPABASE_URL environment variable")
+
+if not SUPABASE_KEY:
     raise RuntimeError(
-        "Missing SUPABASE_URL and SUPABASE_SECRET_KEY "
-        "(or SUPABASE_SERVICE_ROLE_KEY)"
+        "Missing SUPABASE_SECRET_KEY or "
+        "SUPABASE_SERVICE_ROLE_KEY environment variable"
     )
 
 
@@ -38,15 +37,12 @@ supabase = create_client(
     SUPABASE_KEY
 )
 
+
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-FRONTEND_DIR = os.path.join(BASE_DIR, "frontend")
+FRONTEND_DIR = BASE_DIR
 
-
-# =========================================================
-# GENERAL HELPERS
-# =========================================================
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -63,12 +59,7 @@ def json_error(message, status=500, details=None):
     return jsonify(result), status
 
 
-# =========================================================
-# DATABASE HELPERS
-# =========================================================
-
 def get_files():
-
     response = (
         supabase
         .table("ledger_files")
@@ -81,7 +72,6 @@ def get_files():
 
 
 def get_blocks():
-
     response = (
         supabase
         .table("ledger_blocks")
@@ -93,23 +83,16 @@ def get_blocks():
     return response.data or []
 
 
-# =========================================================
-# MERKLE TREE
-# =========================================================
-
 def merkle_root(hashes):
-
     if not hashes:
         return ""
 
     level = list(hashes)
 
     while len(level) > 1:
-
         next_level = []
 
         for i in range(0, len(level), 2):
-
             left = level[i]
 
             if i + 1 < len(level):
@@ -133,12 +116,7 @@ def merkle_root(hashes):
     return level[0]
 
 
-# =========================================================
-# FILENAME HELPERS
-# =========================================================
-
 def safe_filename(filename):
-
     filename = os.path.basename(
         filename or "unnamed"
     )
@@ -151,12 +129,14 @@ def safe_filename(filename):
 
     filename = filename[:180]
 
-    return filename or "unnamed"
+    if not filename:
+        filename = "unnamed"
+
+    return filename
 
 
 def next_file_path(filename):
-
-    existing = get_files()
+    existing_files = get_files()
 
     used_numbers = []
 
@@ -164,8 +144,7 @@ def next_file_path(filename):
         r"^/uploads/(\d+)-"
     )
 
-    for row in existing:
-
+    for row in existing_files:
         path = row.get("path", "")
 
         match = pattern.match(path)
@@ -175,10 +154,10 @@ def next_file_path(filename):
                 int(match.group(1))
             )
 
-    number = max(
-        used_numbers,
-        default=0
-    ) + 1
+    number = (
+        max(used_numbers, default=0)
+        + 1
+    )
 
     return (
         f"/uploads/"
@@ -187,25 +166,20 @@ def next_file_path(filename):
     )
 
 
-# =========================================================
-# SUPABASE STORAGE
-# =========================================================
-
 def storage_upload(
     path,
     data,
     content_type="application/octet-stream"
 ):
-
     return (
         supabase
         .storage
         .from_(SUPABASE_BUCKET)
         .upload(
-            path=path,
-            file=data,
-            file_options={
-                "content-type": str(content_type),
+            path,
+            data,
+            {
+                "content-type": content_type,
                 "cache-control": "3600",
                 "upsert": "false"
             }
@@ -218,16 +192,15 @@ def storage_update(
     data,
     content_type="application/octet-stream"
 ):
-
     return (
         supabase
         .storage
         .from_(SUPABASE_BUCKET)
         .update(
-            path=path,
-            file=data,
-            file_options={
-                "content-type": str(content_type),
+            path,
+            data,
+            {
+                "content-type": content_type,
                 "cache-control": "3600",
                 "upsert": "true"
             }
@@ -236,7 +209,6 @@ def storage_update(
 
 
 def storage_download(path):
-
     return (
         supabase
         .storage
@@ -246,7 +218,6 @@ def storage_download(path):
 
 
 def storage_delete(path):
-
     return (
         supabase
         .storage
@@ -255,28 +226,17 @@ def storage_delete(path):
     )
 
 
-# =========================================================
-# FRONTEND
-# =========================================================
-
 @app.route("/")
 def index():
-
     return send_from_directory(
         FRONTEND_DIR,
         "index.html"
     )
 
 
-# =========================================================
-# GET STATE
-# =========================================================
-
-@app.get("/api/state")
+@app.route("/api/state", methods=["GET"])
 def api_state():
-
     try:
-
         files = get_files()
         blocks = get_blocks()
 
@@ -290,28 +250,21 @@ def api_state():
             for row in blocks
         )
 
+        dedup_saved = max(
+            logical_bytes - unique_bytes,
+            0
+        )
+
         return jsonify({
-
             "stats": {
-
                 "files": len(files),
-
                 "blocks": len(blocks),
-
                 "logical_bytes": logical_bytes,
-
                 "unique_bytes": unique_bytes,
-
-                "dedup_saved": max(
-                    logical_bytes - unique_bytes,
-                    0
-                )
+                "dedup_saved": dedup_saved
             },
-
             "files": files,
-
             "blocks": blocks,
-
             "avl": [
                 row.get("path", "")
                 for row in files
@@ -319,57 +272,44 @@ def api_state():
         })
 
     except Exception as exc:
-
         return json_error(
             "Could not load Ledger state",
             details=exc
         )
 
 
-# =========================================================
-# UPLOAD
-# =========================================================
-
-@app.post("/api/upload")
+@app.route("/api/upload", methods=["POST"])
 def api_upload():
-
     try:
+        uploaded_file = request.files.get("file")
 
-        uploaded = request.files.get("file")
-
-        if uploaded is None:
-
+        if uploaded_file is None:
             return json_error(
                 "No file received. Expected form field 'file'.",
                 400
             )
 
         original_name = (
-            uploaded.filename
+            uploaded_file.filename
             or "unnamed"
         )
 
         content_type = (
-            uploaded.mimetype
+            uploaded_file.mimetype
             or "application/octet-stream"
         )
 
-        raw = uploaded.read()
+        raw_data = uploaded_file.read()
 
-        if raw is None:
-            raw = b""
+        if raw_data is None:
+            raw_data = b""
 
         block_hashes = []
 
         offset = 0
 
-        # -------------------------------------------------
-        # Split file into 64 KB blocks
-        # -------------------------------------------------
-
-        while offset < len(raw):
-
-            block = raw[
+        while offset < len(raw_data):
+            block = raw_data[
                 offset:
                 offset + CHUNK_SIZE
             ]
@@ -384,29 +324,31 @@ def api_upload():
                 block_hash
             )
 
-            # Check whether block already exists
             existing_response = (
                 supabase
                 .table("ledger_blocks")
                 .select("*")
-                .eq("hash", block_hash)
+                .eq(
+                    "hash",
+                    block_hash
+                )
                 .limit(1)
                 .execute()
             )
 
             if existing_response.data:
-
-                existing = (
+                existing_block = (
                     existing_response.data[0]
                 )
 
+                old_ref_count = int(
+                    existing_block.get(
+                        "ref_count"
+                    ) or 0
+                )
+
                 new_ref_count = (
-                    int(
-                        existing.get(
-                            "ref_count"
-                        ) or 0
-                    )
-                    + 1
+                    old_ref_count + 1
                 )
 
                 (
@@ -424,19 +366,16 @@ def api_upload():
                 )
 
             else:
-
                 storage_path = (
                     f"blocks/{block_hash}"
                 )
 
-                # Store the new content block
                 storage_upload(
                     storage_path,
                     block,
                     "application/octet-stream"
                 )
 
-                # Store metadata in PostgreSQL
                 (
                     supabase
                     .table("ledger_blocks")
@@ -450,15 +389,11 @@ def api_upload():
                     .execute()
                 )
 
-        # -------------------------------------------------
-        # Create Ledger file entry
-        # -------------------------------------------------
-
         file_path = next_file_path(
             original_name
         )
 
-        root = merkle_root(
+        root_hash = merkle_root(
             block_hashes
         )
 
@@ -468,10 +403,10 @@ def api_upload():
             .insert({
                 "path": file_path,
                 "name": original_name,
-                "size": len(raw),
+                "size": len(raw_data),
                 "blocks": len(block_hashes),
                 "block_hashes": block_hashes,
-                "merkle_root": root,
+                "merkle_root": root_hash,
                 "status": "INTACT",
                 "created_at": now_iso()
             })
@@ -479,37 +414,24 @@ def api_upload():
         )
 
         return jsonify({
-
             "ok": True,
-
             "path": file_path,
-
             "name": original_name,
-
-            "size": len(raw),
-
+            "size": len(raw_data),
             "blocks": len(block_hashes),
-
-            "merkle_root": root
+            "merkle_root": root_hash
         })
 
     except Exception as exc:
-
         return json_error(
             "Upload failed",
             details=exc
         )
 
 
-# =========================================================
-# VERIFY
-# =========================================================
-
-@app.post("/api/verify")
+@app.route("/api/verify", methods=["POST"])
 def api_verify():
-
     try:
-
         body = (
             request.get_json(
                 silent=True
@@ -517,34 +439,35 @@ def api_verify():
             or {}
         )
 
-        path = body.get("path")
+        file_path = body.get("path")
 
-        if not path:
-
+        if not file_path:
             return json_error(
                 "Missing file path",
                 400
             )
 
-        rows = (
+        response = (
             supabase
             .table("ledger_files")
             .select("*")
-            .eq("path", path)
+            .eq(
+                "path",
+                file_path
+            )
             .limit(1)
             .execute()
         )
 
-        if not rows.data:
-
+        if not response.data:
             return json_error(
                 "File not found",
                 404
             )
 
-        file_row = rows.data[0]
+        file_row = response.data[0]
 
-        hashes = (
+        expected_hashes = (
             file_row.get(
                 "block_hashes"
             )
@@ -552,35 +475,31 @@ def api_verify():
         )
 
         verified_hashes = []
-
         corrupted = False
 
-        for block_hash in hashes:
+        for expected_hash in expected_hashes:
+            storage_path = (
+                f"blocks/{expected_hash}"
+            )
 
             try:
-
-                data = storage_download(
-                    f"blocks/{block_hash}"
+                block_data = storage_download(
+                    storage_path
                 )
-
             except Exception:
-
                 corrupted = True
-
                 break
 
             actual_hash = hashlib.sha256(
-                data
+                block_data
             ).hexdigest()
 
             verified_hashes.append(
                 actual_hash
             )
 
-            if actual_hash != block_hash:
-
+            if actual_hash != expected_hash:
                 corrupted = True
-
                 break
 
         calculated_root = ""
@@ -588,9 +507,8 @@ def api_verify():
         if (
             not corrupted
             and len(verified_hashes)
-            == len(hashes)
+            == len(expected_hashes)
         ):
-
             calculated_root = merkle_root(
                 verified_hashes
             )
@@ -598,7 +516,7 @@ def api_verify():
         intact = (
             not corrupted
             and len(verified_hashes)
-            == len(hashes)
+            == len(expected_hashes)
             and calculated_root
             == file_row.get(
                 "merkle_root"
@@ -619,45 +537,33 @@ def api_verify():
             })
             .eq(
                 "path",
-                path
+                file_path
             )
             .execute()
         )
 
         return jsonify({
-
             "ok": intact,
-
-            "path": path,
-
+            "path": file_path,
             "status": status,
-
             "expected_merkle_root":
                 file_row.get(
                     "merkle_root"
                 ),
-
             "calculated_merkle_root":
                 calculated_root
         })
 
     except Exception as exc:
-
         return json_error(
             "Verification failed",
             details=exc
         )
 
 
-# =========================================================
-# DELETE
-# =========================================================
-
-@app.post("/api/delete")
+@app.route("/api/delete", methods=["POST"])
 def api_delete():
-
     try:
-
         body = (
             request.get_json(
                 silent=True
@@ -665,43 +571,43 @@ def api_delete():
             or {}
         )
 
-        path = body.get("path")
+        file_path = body.get("path")
 
-        if not path:
-
+        if not file_path:
             return json_error(
                 "Missing file path",
                 400
             )
 
-        rows = (
+        response = (
             supabase
             .table("ledger_files")
             .select("*")
-            .eq("path", path)
+            .eq(
+                "path",
+                file_path
+            )
             .limit(1)
             .execute()
         )
 
-        if not rows.data:
-
+        if not response.data:
             return json_error(
                 "File not found",
                 404
             )
 
-        file_row = rows.data[0]
+        file_row = response.data[0]
 
-        hashes = (
+        block_hashes = (
             file_row.get(
                 "block_hashes"
             )
             or []
         )
 
-        for block_hash in hashes:
-
-            block_rows = (
+        for block_hash in block_hashes:
+            block_response = (
                 supabase
                 .table("ledger_blocks")
                 .select("*")
@@ -713,20 +619,20 @@ def api_delete():
                 .execute()
             )
 
-            if not block_rows.data:
+            if not block_response.data:
                 continue
 
-            block_row = block_rows.data[0]
+            block_row = (
+                block_response.data[0]
+            )
 
             ref_count = int(
                 block_row.get(
                     "ref_count"
-                )
-                or 0
+                ) or 0
             )
 
             if ref_count <= 1:
-
                 storage_delete(
                     f"blocks/{block_hash}"
                 )
@@ -743,7 +649,6 @@ def api_delete():
                 )
 
             else:
-
                 (
                     supabase
                     .table("ledger_blocks")
@@ -764,33 +669,26 @@ def api_delete():
             .delete()
             .eq(
                 "path",
-                path
+                file_path
             )
             .execute()
         )
 
         return jsonify({
             "ok": True,
-            "path": path
+            "path": file_path
         })
 
     except Exception as exc:
-
         return json_error(
             "Delete failed",
             details=exc
         )
 
 
-# =========================================================
-# CORRUPT BLOCK
-# =========================================================
-
-@app.post("/api/corrupt")
+@app.route("/api/corrupt", methods=["POST"])
 def api_corrupt():
-
     try:
-
         body = (
             request.get_json(
                 silent=True
@@ -798,40 +696,42 @@ def api_corrupt():
             or {}
         )
 
-        block_hash = body.get(
-            "hash"
-        )
+        block_hash = body.get("hash")
 
         if not block_hash:
-
             return json_error(
                 "Missing block hash",
                 400
             )
 
-        data = storage_download(
+        storage_path = (
             f"blocks/{block_hash}"
         )
 
-        if not data:
+        block_data = storage_download(
+            storage_path
+        )
 
-            data = b"\x00"
+        if block_data is None:
+            block_data = b"\x00"
+
+        elif len(block_data) == 0:
+            block_data = b"\x00"
 
         else:
-
-            corrupted = bytearray(
-                data
+            corrupted_data = bytearray(
+                block_data
             )
 
-            corrupted[0] ^= 0xFF
+            corrupted_data[0] ^= 0xFF
 
-            data = bytes(
-                corrupted
+            block_data = bytes(
+                corrupted_data
             )
 
         storage_update(
-            f"blocks/{block_hash}",
-            data,
+            storage_path,
+            block_data,
             "application/octet-stream"
         )
 
@@ -849,35 +749,37 @@ def api_corrupt():
         )
 
         return jsonify({
-
             "ok": True,
-
             "hash": block_hash,
-
             "message":
                 "Block corrupted successfully"
         })
 
     except Exception as exc:
-
         return json_error(
             "Corruption test failed",
             details=exc
         )
 
 
-# =========================================================
-# LOCAL DEVELOPMENT
-# =========================================================
+@app.route("/api/health", methods=["GET"])
+def health():
+    return jsonify({
+        "ok": True,
+        "service": "The Ledger",
+        "supabase": True
+    })
+
 
 if __name__ == "__main__":
+    port = int(
+        os.environ.get(
+            "PORT",
+            5000
+        )
+    )
 
     app.run(
         host="0.0.0.0",
-        port=int(
-            os.environ.get(
-                "PORT",
-                5000
-            )
-        )
-      )
+        port=port
+                )
