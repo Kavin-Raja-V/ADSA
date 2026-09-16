@@ -4,1084 +4,857 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Ledger — Content-Addressed Vault</title>
-
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
-
-  :root{
-    --vault-950:#0F1C17;
-    --vault-900:#152722;
-    --vault-800:#1D342D;
-    --vault-700:#2A473E;
-    --vault-line:#3A5A4F;
-    --paper:#EDE6D6;
-    --paper-dim:#B9C3B9;
-    --brass:#C08552;
-    --brass-bright:#DDA26C;
-    --teal:#5FA8A0;
-    --alert:#D9694A;
-    --radius-s:3px;
-    --radius-m:6px;
-    font-size:16px;
-  }
-
-  *{box-sizing:border-box;}
-
-  html,body{
-    margin:0;
-    padding:0;
-  }
-
-  body{
-    background:var(--vault-950);
-    background-image:
-      radial-gradient(circle at 15% 0%, rgba(192,133,82,0.07), transparent 45%),
-      radial-gradient(circle at 85% 15%, rgba(95,168,160,0.06), transparent 40%);
-    color:var(--paper);
-    font-family:'IBM Plex Sans',sans-serif;
-    line-height:1.55;
-    -webkit-font-smoothing:antialiased;
-  }
-
-  h1,h2,h3{
-    font-family:'Fraunces',serif;
-    font-weight:500;
-    margin:0;
-    color:var(--paper);
-    letter-spacing:0.01em;
-  }
-
-  code,.mono{
-    font-family:'IBM Plex Mono',monospace;
-  }
-
-  a{
-    color:var(--brass-bright);
-  }
-
-  ::selection{
-    background:var(--brass);
-    color:var(--vault-950);
-  }
-
-  .wrap{
-    max-width:1180px;
-    margin:0 auto;
-    padding:0 32px;
-  }
-
-  /* HERO */
-
-  header.hero{
-    border-bottom:1px solid var(--vault-line);
-    padding:72px 0 56px;
-  }
-
-  .hero-grid{
-    display:grid;
-    grid-template-columns:1.1fr 0.9fr;
-    gap:56px;
-    align-items:start;
-  }
-
-  .kicker{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:0.78rem;
-    color:var(--teal);
-    margin-bottom:18px;
-    display:flex;
-    align-items:center;
-    gap:10px;
-  }
-
-  .kicker .dot{
-    width:6px;
-    height:6px;
-    border-radius:50%;
-    background:var(--teal);
-    display:inline-block;
-  }
-
-  h1.title{
-    font-size:2.7rem;
-    line-height:1.08;
-    max-width:14ch;
-  }
-
-  h1.title em{
-    font-style:italic;
-    color:var(--brass-bright);
-  }
-
-  .lede{
-    margin-top:22px;
-    max-width:52ch;
-    color:var(--paper-dim);
-    font-size:1.05rem;
-  }
-
-  .lede strong{
-    color:var(--paper);
-    font-weight:600;
-  }
-
-  .layer-legend{
-    margin-top:34px;
-    display:flex;
-    flex-direction:column;
-    gap:10px;
-  }
-
-  .layer-legend .row{
-    display:grid;
-    grid-template-columns:22px auto 1fr;
-    gap:12px;
-    align-items:baseline;
-    font-size:0.88rem;
-    color:var(--paper-dim);
-  }
-
-  .layer-legend .num{
-    font-family:'IBM Plex Mono',monospace;
-    color:var(--brass);
-    font-size:0.8rem;
-  }
-
-  .layer-legend .name{
-    color:var(--paper);
-    font-weight:500;
-  }
-
-  /* DROPZONE */
-
-  .slot{
-    background:var(--vault-900);
-    border:1.5px dashed var(--vault-line);
-    border-radius:var(--radius-m);
-    padding:36px 28px;
-    text-align:center;
-    transition:border-color .18s ease,background .18s ease;
-    cursor:pointer;
-  }
-
-  .slot.dragover{
-    border-color:var(--brass);
-    background:var(--vault-800);
-  }
-
-  .slot .slit{
-    width:64px;
-    height:10px;
-    background:var(--vault-950);
-    border:1px solid var(--vault-line);
-    border-radius:6px;
-    margin:0 auto 20px;
-    box-shadow:inset 0 2px 4px rgba(0,0,0,0.5);
-  }
-
-  .slot h3{
-    font-size:1.05rem;
-    font-weight:500;
-    margin-bottom:6px;
-  }
-
-  .slot p{
-    color:var(--paper-dim);
-    font-size:0.88rem;
-    margin:0;
-  }
-
-  .slot input{
-    display:none;
-  }
-
-  .demo-btn{
-    margin-top:16px;
-    width:100%;
-    background:transparent;
-    border:1px solid var(--vault-line);
-    color:var(--paper-dim);
-    font-family:'IBM Plex Sans',sans-serif;
-    font-size:0.85rem;
-    padding:10px 14px;
-    border-radius:var(--radius-s);
-    cursor:pointer;
-    transition:all .15s ease;
-  }
-
-  .demo-btn:hover{
-    border-color:var(--brass);
-    color:var(--brass-bright);
-  }
-
-  .demo-btn:disabled{
-    opacity:.5;
-    cursor:wait;
-  }
-
-  .config-line{
-    margin-top:14px;
-    font-family:'IBM Plex Mono',monospace;
-    font-size:0.75rem;
-    color:var(--paper-dim);
-    text-align:center;
-  }
-
-  /* SECTIONS */
-
-  section{
-    padding:56px 0;
-    border-bottom:1px solid var(--vault-line);
-  }
-
-  section:last-of-type{
-    border-bottom:none;
-  }
-
-  .section-head{
-    display:flex;
-    justify-content:space-between;
-    align-items:flex-end;
-    gap:24px;
-    margin-bottom:30px;
-    flex-wrap:wrap;
-  }
-
-  .section-head .eyebrow{
-    font-family:'IBM Plex Mono',monospace;
-    color:var(--brass);
-    font-size:0.78rem;
-  }
-
-  .section-head h2{
-    font-size:1.55rem;
-    margin-top:6px;
-  }
-
-  .section-head p.desc{
-    color:var(--paper-dim);
-    max-width:46ch;
-    font-size:0.92rem;
-    margin-top:8px;
-  }
-
-  .empty{
-    color:var(--paper-dim);
-    font-size:0.92rem;
-    padding:28px;
-    border:1px dashed var(--vault-line);
-    border-radius:var(--radius-m);
-    text-align:center;
-  }
-
-  /* STATS */
-
-  .stat-row{
-    display:grid;
-    grid-template-columns:repeat(5,1fr);
-    gap:1px;
-    background:var(--vault-line);
-    border:1px solid var(--vault-line);
-    border-radius:var(--radius-m);
-    overflow:hidden;
-  }
-
-  .stat{
-    background:var(--vault-900);
-    padding:22px 18px;
-  }
-
-  .stat .label{
-    font-size:0.72rem;
-    color:var(--paper-dim);
-    font-family:'IBM Plex Mono',monospace;
-  }
-
-  .stat .value{
-    font-family:'Fraunces',serif;
-    font-size:1.9rem;
-    margin-top:8px;
-    color:var(--paper);
-  }
-
-  .stat .value.brass{
-    color:var(--brass-bright);
-  }
-
-  .stat .value.teal{
-    color:var(--teal);
-  }
-
-  .stat .sub{
-    font-size:0.75rem;
-    color:var(--paper-dim);
-    margin-top:4px;
-  }
-
-  /* BLOCK STORE */
-
-  .block-grid{
-    display:flex;
-    flex-wrap:wrap;
-    gap:8px;
-  }
-
-  .block{
-    width:64px;
-    height:64px;
-    border-radius:var(--radius-s);
-    background:var(--vault-800);
-    border:1px solid var(--vault-line);
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    justify-content:center;
-    font-family:'IBM Plex Mono',monospace;
-    font-size:0.6rem;
-    color:var(--paper-dim);
-    position:relative;
-    cursor:default;
-    transition:transform .12s ease,border-color .12s ease;
-  }
-
-  .block:hover{
-    transform:translateY(-2px);
-    border-color:var(--brass);
-  }
-
-  .block .hash{
-    color:var(--paper);
-    font-size:0.62rem;
-  }
-
-  .block .ref{
-    position:absolute;
-    top:-7px;
-    right:-7px;
-    background:var(--teal);
-    color:var(--vault-950);
-    font-size:0.58rem;
-    font-weight:600;
-    border-radius:8px;
-    padding:1px 5px;
-    font-family:'IBM Plex Sans',sans-serif;
-  }
-
-  .block.shared{
-    border-color:var(--teal);
-  }
-
-  .block.corrupted{
-    border-color:var(--alert);
-    background:rgba(217,105,74,0.12);
-  }
-
-  .block .flip{
-    margin-top:4px;
-    font-size:0.55rem;
-    color:var(--brass);
-    text-decoration:underline;
-    cursor:pointer;
-    background:none;
-    border:none;
-    font-family:inherit;
-    padding:0;
-  }
-
-  .block .flip:hover{
-    color:var(--brass-bright);
-  }
-
-  /* LEDGER */
-
-  table.ledger{
-    width:100%;
-    border-collapse:collapse;
-    font-size:0.88rem;
-  }
-
-  table.ledger thead th{
-    text-align:left;
-    font-family:'IBM Plex Mono',monospace;
-    font-weight:400;
-    font-size:0.72rem;
-    color:var(--paper-dim);
-    border-bottom:1px solid var(--vault-line);
-    padding:0 12px 10px;
-  }
-
-  table.ledger tbody td{
-    padding:14px 12px;
-    border-bottom:1px solid var(--vault-800);
-    vertical-align:middle;
-  }
-
-  table.ledger tbody tr:hover{
-    background:rgba(192,133,82,0.05);
-  }
-
-  .path{
-    color:var(--paper);
-    font-family:'IBM Plex Mono',monospace;
-    font-size:0.85rem;
-  }
-
-  .hash-trunc{
-    color:var(--paper-dim);
-    font-family:'IBM Plex Mono',monospace;
-    font-size:0.8rem;
-  }
-
-  .badge{
-    display:inline-block;
-    padding:3px 8px;
-    border-radius:10px;
-    font-size:0.7rem;
-    font-family:'IBM Plex Mono',monospace;
-  }
-
-  .badge.ok{
-    background:rgba(95,168,160,0.15);
-    color:var(--teal);
-  }
-
-  .badge.bad{
-    background:rgba(217,105,74,0.18);
-    color:var(--alert);
-  }
-
-  .badge.idle{
-    background:rgba(255,255,255,0.05);
-    color:var(--paper-dim);
-  }
-
-  .row-actions{
-    display:flex;
-    gap:8px;
-  }
-
-  .mini-btn{
-    background:transparent;
-    border:1px solid var(--vault-line);
-    color:var(--paper-dim);
-    font-family:'IBM Plex Sans',sans-serif;
-    font-size:0.75rem;
-    padding:6px 10px;
-    border-radius:var(--radius-s);
-    cursor:pointer;
-    transition:all .15s ease;
-  }
-
-  .mini-btn:hover{
-    border-color:var(--brass);
-    color:var(--brass-bright);
-  }
-
-  .mini-btn.danger:hover{
-    border-color:var(--alert);
-    color:var(--alert);
-  }
-
-  /* MERKLE / AVL */
-
-  .panel-two{
-    display:grid;
-    grid-template-columns:280px 1fr;
-    gap:0;
-    border:1px solid var(--vault-line);
-    border-radius:var(--radius-m);
-    overflow:hidden;
-  }
-
-  .panel-side{
-    background:var(--vault-900);
-    padding:20px;
-    border-right:1px solid var(--vault-line);
-  }
-
-  .panel-side label{
-    font-family:'IBM Plex Mono',monospace;
-    font-size:0.72rem;
-    color:var(--paper-dim);
-    display:block;
-    margin-bottom:8px;
-  }
-
-  select{
-    width:100%;
-    background:var(--vault-800);
-    color:var(--paper);
-    border:1px solid var(--vault-line);
-    border-radius:var(--radius-s);
-    padding:9px 10px;
-    font-family:'IBM Plex Sans',sans-serif;
-    font-size:0.85rem;
-  }
-
-  .verify-result{
-    margin-top:18px;
-    padding:14px;
-    border-radius:var(--radius-s);
-    font-size:0.82rem;
-    border:1px solid var(--vault-line);
-    display:none;
-  }
-
-  .verify-result.show{
-    display:block;
-  }
-
-  .verify-result.ok{
-    border-color:var(--teal);
-    background:rgba(95,168,160,0.08);
-    color:var(--teal);
-  }
-
-  .verify-result.bad{
-    border-color:var(--alert);
-    background:rgba(217,105,74,0.1);
-    color:var(--alert);
-  }
-
-  .verify-result .root{
-    margin-top:8px;
-    font-family:'IBM Plex Mono',monospace;
-    font-size:0.72rem;
-    color:var(--paper-dim);
-    word-break:break-all;
-  }
-
-  .panel-main{
-    background:var(--vault-950);
-    padding:24px;
-    min-height:340px;
-    overflow-x:auto;
-  }
-
-  svg text{
-    font-family:'IBM Plex Mono',monospace;
-  }
-
-  .node-rect{
-    fill:var(--vault-800);
-    stroke:var(--vault-line);
-    stroke-width:1.2;
-  }
-
-  .node-rect.root{
-    stroke:var(--teal);
-    stroke-width:2;
-  }
-
-  .node-rect.leaf{
-    stroke:var(--brass);
-  }
-
-  .node-rect.bad{
-    fill:rgba(217,105,74,0.14);
-    stroke:var(--alert);
-    stroke-width:2;
-  }
-
-  .node-tag{
-    fill:var(--paper-dim);
-    font-size:9px;
-  }
-
-  .node-label{
-    fill:var(--paper);
-    font-size:9px;
-  }
-
-  .edge{
-    stroke:var(--vault-line);
-    stroke-width:1.2;
-  }
-
-  .edge.bad{
-    stroke:var(--alert);
-  }
-
-  /* REAL STORED AVL TREE */
-
-  .tree-scroll{
-    width:100%;
-    overflow-x:auto;
-    overflow-y:hidden;
-    padding:18px 8px 12px;
-  }
-
-  .tree-scroll svg{
-    display:block;
-    min-width:520px;
-  }
-
-  .avl-legend{
-    display:flex;
-    justify-content:space-between;
-    gap:18px;
-    flex-wrap:wrap;
-    padding:14px 18px 0;
-    color:var(--paper-dim);
-    font-family:'IBM Plex Mono',monospace;
-    font-size:.72rem;
-  }
-
-  .avl-root{
-    stroke:var(--brass-bright)!important;
-    stroke-width:2!important;
-  }
-
-  .avl-legend span{
-    white-space:nowrap;
-  }
-
-  footer{
-    padding:44px 0 60px;
-    color:var(--paper-dim);
-    font-size:0.8rem;
-  }
-
-  footer strong{
-    color:var(--paper);
-  }
-
-  footer .cols{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:40px;
-  }
-
-  @media(max-width:900px){
-
-    .hero-grid{
-      grid-template-columns:1fr;
-      gap:32px;
-    }
-
-    .stat-row{
-      grid-template-columns:repeat(2,1fr);
-    }
-
-    .panel-two{
-      grid-template-columns:1fr;
-    }
-
-    .panel-side{
-      border-right:none;
-      border-bottom:1px solid var(--vault-line);
-    }
-  }
-
-  @media(max-width:600px){
-
-    .wrap{
-      padding:0 18px;
-    }
-
-    header.hero{
-      padding:44px 0 38px;
-    }
-
-    h1.title{
-      font-size:2.2rem;
-    }
-
-    .stat-row{
-      grid-template-columns:1fr 1fr;
-    }
-
-    .stat{
-      padding:18px 14px;
-    }
-
-    .stat .value{
-      font-size:1.55rem;
-    }
-
-    table.ledger{
-      display:block;
-      overflow-x:auto;
-      white-space:nowrap;
-    }
-
-    footer .cols{
-      grid-template-columns:1fr;
-    }
-  }
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:#07130e;color:#e8e2d4;font-family:Georgia,"Times New Roman",serif}
+.container{width:min(1200px,92%);margin:auto}
+header{padding:35px 0 25px;border-bottom:1px solid #31594d}
+h1{margin:0;font-size:clamp(42px,8vw,72px);font-weight:400;letter-spacing:-2px}
+.subtitle{margin-top:8px;color:#9eb0a8;font-family:monospace;font-size:14px}
+.layers{padding:28px 0}
+.layer{display:grid;grid-template-columns:55px 175px 1fr;gap:12px;margin-bottom:15px;align-items:start}
+.number{color:#c89458;font-family:monospace;font-size:20px}
+.layer-title{font-size:22px;font-weight:bold}
+.layer-text{color:#b7c2bc;font-size:18px;line-height:1.3}
+.upload-section{padding:5px 0 35px}
+.dropzone{border:2px dashed #3d7164;border-radius:14px;min-height:210px;display:flex;align-items:center;justify-content:center;text-align:center;cursor:pointer;padding:20px;background:rgba(20,50,41,.25);transition:.2s}
+.dropzone:hover,.dropzone.active{background:rgba(30,75,60,.35);border-color:#78a99a}
+.drop-content{pointer-events:none}
+.drop-icon{width:120px;height:24px;border:2px solid #426e62;border-radius:20px;margin:0 auto 28px}
+.drop-title{font-size:30px;margin-bottom:12px}
+.drop-text{color:#b6c2bd;font-size:18px;line-height:1.4}
+#fileInput{display:none}
+.example-btn{width:100%;margin-top:16px;padding:14px;border:2px solid #3d7164;border-radius:8px;background:transparent;color:#c8d1cb;font-size:18px;cursor:pointer}
+.example-btn:hover{background:#143128}
+.info{text-align:center;margin-top:15px;color:#aab7b0;font-family:monospace;font-size:14px;line-height:1.5}
+.status{margin:15px 0;padding:12px;border-radius:8px;background:#10251d;color:#b8c9c1;font-family:monospace;display:none;white-space:pre-wrap}
+.section{border-top:1px solid #31594d;padding:32px 0}
+.section h2{font-size:28px;font-weight:400;margin:0 0 15px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid #31594d;border-radius:12px;overflow:hidden}
+.stat{padding:18px;border-right:1px solid #31594d}
+.stat:last-child{border-right:0}
+.stat-label{color:#9eaea7;font-family:monospace;font-size:14px}
+.stat-value{margin-top:7px;font-size:34px}
+.card{border:1px solid #31594d;border-radius:12px;overflow:hidden;margin-top:12px}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:700px}
+th,td{padding:10px;border-bottom:1px solid #203f35;text-align:left}
+th{color:#c89458;font-family:monospace;font-weight:normal}
+td{color:#bdc8c2}
+.hash{font-family:monospace;font-size:12px;word-break:break-all}
+.badge{display:inline-block;padding:4px 8px;border-radius:5px;font-family:monospace;font-size:11px;background:#17372b}
+.badge.bad{background:#4b211c;color:#ffb3a7}
+.action{padding:7px 10px;margin:2px;border:1px solid #456f63;border-radius:5px;background:transparent;color:#c7d0ca;cursor:pointer}
+.action:hover{background:#18352c}
+.empty{padding:25px;text-align:center;color:#81918a;font-family:monospace}
+.tree-scroll{overflow-x:auto;padding:15px}
+.avl-tree{min-width:650px;min-height:220px}
+.tree-level{display:flex;justify-content:center;gap:15px;margin-bottom:25px}
+.tree-node{min-width:100px;max-width:180px;padding:9px;border:1px solid #5b8d7d;border-radius:8px;background:#102820;text-align:center;font-family:monospace;font-size:11px;word-break:break-word}
+.tree-node small{display:block;margin-top:5px;color:#9bb0a8}
+.merkle{overflow-x:auto;padding:10px}
+.merkle-row{display:flex;justify-content:center;gap:10px;margin:8px 0}
+.merkle-node{min-width:120px;max-width:170px;padding:10px;border:1px solid #496f64;border-radius:7px;background:#0d2119;font-family:monospace;font-size:10px;word-break:break-all;text-align:center}
+footer{border-top:1px solid #31594d;padding:22px 0 35px;color:#82938b;font-family:monospace;text-align:center;font-size:13px}
+@media(max-width:800px){
+.layer{grid-template-columns:45px 1fr;gap:8px}
+.layer-text{grid-column:2}
+.stats{grid-template-columns:repeat(2,1fr)}
+.stat:nth-child(2){border-right:0}
+.stat:nth-child(-n+2){border-bottom:1px solid #31594d}
+}
+@media(max-width:500px){
+header{padding:28px 0 20px}
+h1{font-size:48px}
+.layers{padding:22px 0}
+.layer-title{font-size:20px}
+.layer-text{font-size:16px}
+.dropzone{min-height:190px}
+.drop-title{font-size:26px}
+.drop-text{font-size:16px}
+.stats{grid-template-columns:1fr}
+.stat{border-right:0;border-bottom:1px solid #31594d}
+.stat:last-child{border-bottom:0}
+.section{padding:25px 0}
+.section h2{font-size:25px}
+}
 </style>
 </head>
 
 <body>
+<div class="container">
 
-<!-- =========================================================
-     HERO
-     ========================================================= -->
-
-<header class="hero">
-
-  <div class="wrap">
-
-    <div class="hero-grid">
-
-      <div>
-
-        <div class="kicker">
-          <span class="dot"></span>
-          CONTENT-ADDRESSED STORAGE · LIVE VAULT
-        </div>
-
-        <h1 class="title">
-          Every file has a <em>fingerprint.</em>
-          <br>
-          <em>Duplicates don't</em>
-          get a second drawer.
-        </h1>
-
-        <p class="lede">
-          The Ledger stores files as content-addressed blocks,
-          records their relationships with a Merkle tree,
-          and keeps file paths ordered with an AVL namespace.
-          <strong>Upload files and watch the data structures update live.</strong>
-        </p>
-
-        <div class="layer-legend">
-
-          <div class="row">
-            <span class="num">01</span>
-            <span class="name">Block store</span>
-            <span>SHA-256 content hashing + reference counting</span>
-          </div>
-
-          <div class="row">
-            <span class="num">02</span>
-            <span class="name">Merkle tree</span>
-            <span>one root hash proves every block is intact</span>
-          </div>
-
-          <div class="row">
-            <span class="num">03</span>
-            <span class="name">Namespace</span>
-            <span>an AVL tree keeps file paths sorted, O(log n)</span>
-          </div>
-
-        </div>
-
-      </div>
-
-
-      <!-- UPLOAD -->
-
-      <div>
-
-        <div class="slot" id="dropzone">
-
-          <div class="slit"></div>
-
-          <h3>
-            Drop files in the slot
-          </h3>
-
-          <p>
-            or click to choose — files are stored in Supabase
-          </p>
-
-          <input
-            type="file"
-            id="fileInput"
-            multiple
-          >
-
-        </div>
-
-        <button
-          class="demo-btn"
-          id="demoBtn"
-        >
-          Load example files (includes a duplicate)
-        </button>
-
-        <div class="config-line">
-          block size: 64 KB · hash: SHA-256 · storage: Supabase · persistent
-        </div>
-
-      </div>
-
-    </div>
-
-  </div>
-
+<header>
+<h1>The Ledger</h1>
+<div class="subtitle">CONTENT-ADDRESSED VAULT · SHA-256 · MERKLE · AVL</div>
 </header>
 
+<section class="layers">
+<div class="layer">
+<div class="number">01</div>
+<div class="layer-title">Block store</div>
+<div class="layer-text">SHA-256 content hashing + reference counting</div>
+</div>
 
-<!-- =========================================================
-     STATISTICS
-     ========================================================= -->
+<div class="layer">
+<div class="number">02</div>
+<div class="layer-title">Merkle tree</div>
+<div class="layer-text">one root hash proves every block is intact</div>
+</div>
 
-<section id="stats-section">
+<div class="layer">
+<div class="number">03</div>
+<div class="layer-title">Namespace</div>
+<div class="layer-text">an AVL tree keeps file paths sorted, O(log n)</div>
+</div>
+</section>
 
-  <div class="wrap">
+<section class="upload-section">
 
-    <div class="stat-row">
+<input id="fileInput" type="file" multiple>
 
-      <div class="stat">
-        <div class="label">FILES</div>
-        <div class="value" id="statFiles">0</div>
-        <div class="sub">virtual paths</div>
-      </div>
+<label for="fileInput" class="dropzone" id="dropzone">
+<div class="drop-content">
+<div class="drop-icon"></div>
+<div class="drop-title">Drop files in the slot</div>
+<div class="drop-text">or click to choose — files are stored in Supabase</div>
+</div>
+</label>
 
-      <div class="stat">
-        <div class="label">UNIQUE BLOCKS</div>
-        <div class="value" id="statBlocks">0</div>
-        <div class="sub">stored once each</div>
-      </div>
+<button class="example-btn" id="exampleBtn" type="button">
+Load example files (includes a duplicate)
+</button>
 
-      <div class="stat">
-        <div class="label">LOGICAL SIZE</div>
-        <div class="value" id="statLogical">0 B</div>
-        <div class="sub">if nothing were shared</div>
-      </div>
+<div class="status" id="status"></div>
 
-      <div class="stat">
-        <div class="label">PHYSICAL SIZE</div>
-        <div class="value brass" id="statPhysical">0 B</div>
-        <div class="sub">actually stored</div>
-      </div>
-
-      <div class="stat">
-        <div class="label">SAVED</div>
-        <div class="value teal" id="statSaved">0%</div>
-        <div class="sub" id="statSavedBytes">0 B deduplicated</div>
-      </div>
-
-    </div>
-
-  </div>
+<div class="info">
+block size: 64 KB · hash: SHA-256 · storage: Supabase · persistent
+</div>
 
 </section>
 
+<section class="section">
+<div class="stats">
 
-<!-- =========================================================
-     BLOCK STORE
-     ========================================================= -->
+<div class="stat">
+<div class="stat-label">FILES</div>
+<div class="stat-value" id="statFiles">0</div>
+<div>virtual paths</div>
+</div>
 
-<section id="blocks-section">
+<div class="stat">
+<div class="stat-label">UNIQUE BLOCKS</div>
+<div class="stat-value" id="statBlocks">0</div>
+<div>stored once each</div>
+</div>
 
-  <div class="wrap">
+<div class="stat">
+<div class="stat-label">LOGICAL SIZE</div>
+<div class="stat-value" id="statLogical">0 B</div>
+<div>total file data</div>
+</div>
 
-    <div class="section-head">
+<div class="stat">
+<div class="stat-label">DEDUP SAVED</div>
+<div class="stat-value" id="statSaved">0 B</div>
+<div>storage avoided</div>
+</div>
 
-      <div>
-
-        <div class="eyebrow">
-          LAYER 01 — CONTENT-ADDRESSABLE STORAGE
-        </div>
-
-        <h2>
-          The block store
-        </h2>
-
-        <p class="desc">
-          Every 64 KB chunk is hashed before it is kept.
-          A hash the vault has already seen is never stored twice —
-          its reference count just goes up.
-        </p>
-
-      </div>
-
-    </div>
-
-    <div id="blockGrid" class="block-grid"></div>
-
-    <div
-      id="blockEmpty"
-      class="empty"
-    >
-      No blocks yet — upload a file to see it chunked and hashed.
-    </div>
-
-  </div>
-
+</div>
 </section>
 
+<section class="section">
+<h2>Ledger Files</h2>
 
-<!-- =========================================================
-     FILE LEDGER
-     ========================================================= -->
-
-<section id="ledger-section">
-
-  <div class="wrap">
-
-    <div class="section-head">
-
-      <div>
-
-        <div class="eyebrow">
-          FILE LEDGER
-        </div>
-
-        <h2>
-          What the vault has recorded
-        </h2>
-
-        <p class="desc">
-          Each entry points to an ordered list of block hashes
-          and one Merkle root. Verify re-hashes blocks on file;
-          corrupt simulates bit rot or tampering.
-        </p>
-
-      </div>
-
-    </div>
-
-
-    <table
-      class="ledger"
-      id="ledgerTable"
-    >
-
-      <thead>
-
-        <tr>
-          <th>Path</th>
-          <th>Size</th>
-          <th>Blocks</th>
-          <th>Merkle root</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-
-      </thead>
-
-      <tbody id="ledgerBody"></tbody>
-
-    </table>
-
-
-    <div
-      id="ledgerEmpty"
-      class="empty"
-    >
-      No files filed yet.
-    </div>
-
-  </div>
-
+<div class="card">
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>PATH</th>
+<th>SIZE</th>
+<th>BLOCKS</th>
+<th>MERKLE ROOT</th>
+<th>STATUS</th>
+<th>ACTIONS</th>
+</tr>
+</thead>
+<tbody id="filesBody"></tbody>
+</table>
+</div>
+</div>
 </section>
 
+<section class="section">
+<h2>Block Store</h2>
 
-<!-- =========================================================
-     MERKLE TREE
-     ========================================================= -->
-
-<section id="merkle-section">
-
-  <div class="wrap">
-
-    <div class="section-head">
-
-      <div>
-
-        <div class="eyebrow">
-          LAYER 02 — INTEGRITY
-        </div>
-
-        <h2>
-          Merkle tree &amp; tamper check
-        </h2>
-
-        <p class="desc">
-          Pick a file to see its tree. Flip a bit in one of its
-          blocks in the store above, then verify —
-          the mismatch is traceable straight up to the root.
-        </p>
-
-      </div>
-
-    </div>
-
-
-    <div class="panel-two">
-
-      <div class="panel-side">
-
-        <label for="fileSelect">
-          FILE
-        </label>
-
-        <select id="fileSelect">
-          <option value="">
-            — no files yet —
-          </option>
-        </select>
-
-        <button
-          class="mini-btn"
-          id="verifyBtn"
-          style="margin-top:14px;width:100%;"
-        >
-          Verify integrity
-        </button>
-
-        <div
-          class="verify-result"
-          id="verifyResult"
-        ></div>
-
-      </div>
-
-
-      <div
-        class="panel-main"
-        id="merkleCanvas"
-      >
-
-        <div class="empty">
-          Select a file once you've uploaded one.
-        </div>
-
-      </div>
-
-    </div>
-
-  </div>
-
+<div class="card">
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+<th>HASH</th>
+<th>SIZE</th>
+<th>REFERENCES</th>
+<th>STATUS</th>
+<th>ACTION</th>
+</tr>
+</thead>
+<tbody id="blocksBody"></tbody>
+</table>
+</div>
+</div>
 </section>
 
+<section class="section">
+<h2>AVL Namespace</h2>
 
-<!-- =========================================================
-     AVL TREE
-     ========================================================= -->
+<div class="card">
+<div class="tree-scroll">
+<div class="avl-tree" id="avlTree"></div>
+</div>
+</div>
+</section>
 
-<section id="avl-section">
+<section class="section">
+<h2>Merkle Tree</h2>
 
-  <div class="wrap">
+<div class="card">
+<div class="merkle" id="merkleTree"></div>
+</div>
+</section>
 
-    <div class="section-head">
+</div>
 
-      <div>
+<footer>
+THE LEDGER · CONTENT-ADDRESSED STORAGE · SHA-256 · MERKLE · AVL
+</footer>
 
-        <div class="eyebrow">
-          LAYER 03 — NAMESPACE, VISUALIZED
-        </div>
+<script>
+const API="/api";
 
-        <h2>
-          The AVL tree keeping paths sorted
-        </h2>
+const fileInput=document.getElementById("fileInput");
+const dropzone=document.getElementById("dropzone");
+const exampleBtn=document.getElementById("exampleBtn");
+const statusBox=document.getElementById("status");
 
-        <p class="desc">
-          Insertions rebalance automatically, so a lookup by path
-          never costs more than O(log n) comparisons, however many
-          files pile up.
-        </p>
+function showStatus(message){
+statusBox.style.display="block";
+statusBox.textContent=message;
+}
 
-      </div>
+async function api(path,options={}){
+const response=await fetch(API+path,options);
+const text=await response.text();
+let data;
 
-    </div>
+try{
+data=text?JSON.parse(text):{};
+}catch{
+data={error:text};
+}
 
+if(!response.ok){
+throw new Error(data.details||data.error||`HTTP ${response.status}`);
+}
 
-    <div
-      class="panel-main"
-      id="avlCanvas"
-      sty
+return data;
+}
+
+function formatBytes(bytes){
+bytes=Number(bytes)||0;
+
+if(bytes<1024)return bytes+" B";
+if(bytes<1024*1024)return(bytes/1024).toFixed(1)+" KB";
+if(bytes<1024*1024*1024)return(bytes/(1024*1024)).toFixed(2)+" MB";
+
+return(bytes/(1024*1024*1024)).toFixed(2)+" GB";
+}
+
+async function uploadFile(file){
+showStatus("Uploading "+file.name+"...");
+
+const form=new FormData();
+form.append("file",file,file.name);
+
+try{
+const result=await api("/upload",{
+method:"POST",
+body:form
+});
+
+showStatus("Upload successful:\n"+result.path);
+await refresh();
+
+}catch(error){
+showStatus("Upload failed:\n"+error.message);
+}
+}
+
+fileInput.addEventListener("change",async function(){
+const files=Array.from(this.files||[]);
+
+if(!files.length)return;
+
+for(const file of files){
+await uploadFile(file);
+}
+
+this.value="";
+});
+
+dropzone.addEventListener("dragover",function(event){
+event.preventDefault();
+dropzone.classList.add("active");
+});
+
+dropzone.addEventListener("dragleave",function(){
+dropzone.classList.remove("active");
+});
+
+dropzone.addEventListener("drop",async function(event){
+event.preventDefault();
+dropzone.classList.remove("active");
+
+const files=Array.from(event.dataTransfer.files||[]);
+
+for(const file of files){
+await uploadFile(file);
+}
+});
+
+exampleBtn.addEventListener("click",async function(){
+
+const examples=[
+new File(
+["The Ledger example report.\nContent addressed storage.\n"],
+"q3-report.txt",
+{type:"text/plain"}
+),
+new File(
+["The Ledger example report.\nContent addressed storage.\n"],
+"q3-report-backup.txt",
+{type:"text/plain"}
+),
+new File(
+["A second example document."],
+"notes.txt",
+{type:"text/plain"}
+),
+new File(
+["Ledger project demonstration file."],
+"demo.txt",
+{type:"text/plain"}
+)
+];
+
+for(const file of examples){
+await uploadFile(file);
+}
+});
+
+async function deleteFile(path){
+
+if(!confirm("Delete "+path+"?"))return;
+
+try{
+
+await api("/delete",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({path:path})
+});
+
+await refresh();
+
+}catch(error){
+
+alert("Delete failed:\n"+error.message);
+}
+}
+
+async function verifyFile(path){
+
+try{
+
+const result=await api("/verify",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({path:path})
+});
+
+alert(
+result.status==="INTACT"
+?"✓ File is intact"
+:"✕ File is corrupted"
+);
+
+await refresh();
+
+}catch(error){
+
+alert("Verification failed:\n"+error.message);
+}
+}
+
+async function corruptBlock(hash){
+
+if(!confirm("Corrupt this block for testing?"))return;
+
+try{
+
+await api("/corrupt",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({hash:hash})
+});
+
+await refresh();
+
+alert(
+"Block corrupted.\nRun Verify on a file using this block."
+);
+
+}catch(error){
+
+alert(
+"Corruption test failed:\n"+
+error.message
+);
+}
+}
+
+function escapeHtml(value){
+return String(value)
+.replaceAll("&","&amp;")
+.replaceAll("<","&lt;")
+.replaceAll(">","&gt;")
+.replaceAll('"',"&quot;")
+.replaceAll("'","&#039;");
+}
+
+function renderStats(stats){
+
+document.getElementById("statFiles").textContent=stats.files||0;
+document.getElementById("statBlocks").textContent=stats.blocks||0;
+
+document.getElementById("statLogical").textContent=
+formatBytes(stats.logical_bytes);
+
+document.getElementById("statSaved").textContent=
+formatBytes(stats.dedup_saved);
+}
+
+function renderFiles(files){
+
+const body=document.getElementById("filesBody");
+
+if(!files.length){
+
+body.innerHTML=`
+<tr>
+<td colspan="6">
+<div class="empty">No files stored yet.</div>
+</td>
+</tr>`;
+
+return;
+}
+
+body.innerHTML=files.map(file=>{
+
+const status=file.status||"INTACT";
+const statusClass=
+status==="INTACT"?"badge":"badge bad";
+
+return`
+<tr>
+<td class="hash">${escapeHtml(file.path||"")}</td>
+<td>${formatBytes(file.size)}</td>
+<td>${file.blocks||0}</td>
+<td class="hash">${escapeHtml(file.merkle_root||"")}</td>
+<td>
+<span class="${statusClass}">
+${escapeHtml(status)}
+</span>
+</td>
+<td>
+<button class="action"
+onclick="verifyFile(${JSON.stringify(file.path)})">
+Verify
+</button>
+<button class="action"
+onclick="deleteFile(${JSON.stringify(file.path)})">
+Delete
+</button>
+</td>
+</tr>`;
+}).join("");
+}
+
+function renderBlocks(blocks){
+
+const body=document.getElementById("blocksBody");
+
+if(!blocks.length){
+
+body.innerHTML=`
+<tr>
+<td colspan="5">
+<div class="empty">No blocks stored yet.</div>
+</td>
+</tr>`;
+
+return;
+}
+
+body.innerHTML=blocks.map(block=>{
+
+const corrupted=block.corrupted===true;
+
+return`
+<tr>
+<td class="hash">${escapeHtml(block.hash||"")}</td>
+<td>${formatBytes(block.size)}</td>
+<td>${block.ref_count||0}</td>
+<td>
+<span class="${corrupted?"badge bad":"badge"}">
+${corrupted?"CORRUPTED":"INTACT"}
+</span>
+</td>
+<td>
+<button class="action"
+onclick="corruptBlock(${JSON.stringify(block.hash)})">
+Flip a bit
+</button>
+</td>
+</tr>`;
+}).join("");
+}
+
+class AVLNode{
+constructor(value){
+this.value=value;
+this.left=null;
+this.right=null;
+this.height=1;
+}
+}
+
+function nodeHeight(node){
+return node?node.height:0;
+}
+
+function updateHeight(node){
+node.height=1+Math.max(
+nodeHeight(node.left),
+nodeHeight(node.right)
+);
+}
+
+function balanceFactor(node){
+return node?
+nodeHeight(node.left)-nodeHeight(node.right):0;
+}
+
+function rotateRight(y){
+
+const x=y.left;
+const t=x.right;
+
+x.right=y;
+y.left=t;
+
+updateHeight(y);
+updateHeight(x);
+
+return x;
+}
+
+function rotateLeft(x){
+
+const y=x.right;
+const t=y.left;
+
+y.left=x;
+x.right=t;
+
+updateHeight(x);
+updateHeight(y);
+
+return y;
+}
+
+function avlInsert(node,value){
+
+if(!node)return new AVLNode(value);
+
+if(value<node.value){
+
+node.left=avlInsert(
+node.left,
+value
+);
+
+}else if(value>node.value){
+
+node.right=avlInsert(
+node.right,
+value
+);
+
+}else{
+
+return node;
+}
+
+updateHeight(node);
+
+const balance=balanceFactor(node);
+
+if(
+balance>1&&
+value<node.left.value
+){
+return rotateRight(node);
+}
+
+if(
+balance<-1&&
+value>node.right.value
+){
+return rotateLeft(node);
+}
+
+if(
+balance>1&&
+value>node.left.value
+){
+
+node.left=rotateLeft(
+node.left
+);
+
+return rotateRight(node);
+}
+
+if(
+balance<-1&&
+value<node.right.value
+){
+
+node.right=rotateRight(
+node.right
+);
+
+return rotateLeft(node);
+}
+
+return node;
+}
+
+function buildAVL(values){
+
+let root=null;
+
+for(const value of values){
+root=avlInsert(root,value);
+}
+
+return root;
+}
+
+function treeLevels(root){
+
+if(!root)return[];
+
+const levels=[];
+let current=[root];
+
+while(current.some(node=>node!==null)){
+
+levels.push(current);
+
+const next=[];
+
+for(const node of current){
+
+if(node){
+next.push(node.left);
+next.push(node.right);
+}else{
+next.push(null);
+next.push(null);
+}
+}
+
+current=next;
+
+if(current.length>64)break;
+}
+
+return levels;
+}
+
+function renderAVL(paths){
+
+const container=document.getElementById("avlTree");
+
+if(!paths.length){
+
+container.innerHTML=
+`<div class="empty">AVL namespace is empty.</div>`;
+
+return;
+}
+
+const root=buildAVL(paths.slice().sort());
+const levels=treeLevels(root);
+
+container.innerHTML=levels.map(level=>{
+
+const nodes=level.filter(
+node=>node!==null
+);
+
+if(!nodes.length)return"";
+
+return`
+<div class="tree-level">
+${nodes.map(node=>`
+<div class="tree-node">
+${escapeHtml(node.value)}
+<small>
+h=${node.height} · bf=${balanceFactor(node)}
+</small>
+</div>
+`).join("")}
+</div>`;
+
+}).join("");
+}
+
+function renderMerkle(files){
+
+const container=document.getElementById("merkleTree");
+
+if(!files.length){
+
+container.innerHTML=
+`<div class="empty">No Merkle tree available.</div>`;
+
+return;
+}
+
+const file=files[0];
+const hashes=file.block_hashes||[];
+
+if(!hashes.length){
+
+container.innerHTML=
+`<div class="empty">Selected file contains no blocks.</div>`;
+
+return;
+}
+
+let current=hashes.slice();
+
+let html="";
+
+while(current.length){
+
+html+=`
+<div class="merkle-row">
+${current.map(hash=>`
+<div class="merkle-node">
+${escapeHtml(hash)}
+</div>
+`).join("")}
+</div>`;
+
+if(current.length===1)break;
+
+const next=[];
+
+for(
+let i=0;
+i<current.length;
+i+=2
+){
+
+const left=current[i];
+const right=current[i+1]||left;
+
+next.push(
+simpleHash(left+right)
+);
+}
+
+current=next;
+}
+
+container.innerHTML=html;
+}
+
+function simpleHash(value){
+
+let h1=0x811c9dc5;
+
+for(let i=0;i<value.length;i++){
+
+h1^=value.charCodeAt(i);
+h1=Math.imul(h1,16777619);
+}
+
+return(
+Math.abs(h1>>>0)
+.toString(16)
+.padStart(8,"0")
++
+value
+.slice(0,56)
+);
+
+}
+
+async function refresh(){
+
+try{
+
+const state=await api("/state");
+
+renderStats(
+state.stats||{}
+);
+
+renderFiles(
+state.files||[]
+);
+
+renderBlocks(
+state.blocks||[]
+);
+
+renderAVL(
+state.avl||[]
+);
+
+renderMerkle(
+state.files||[]
+);
+
+}catch(error){
+
+showStatus(
+"Unable to load Ledger state:\n"+
+error.message
+);
+}
+}
+
+refresh();
+</script>
+
+</body>
+</html>
