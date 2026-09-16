@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>The Ledger — Content-Addressed Vault</title>
+<style>
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:#07130f;color:#d7d8c8;font-family:Arial,sans-serif;line-height:1.45}
+h1,h2,h3{font-family:Georgia,serif;color:#e7e3d0}
+h1{font-size:48px;line-height:1;margin:8px 0 16px}
+h1 span{color:#d99a62;font-style:italic}
+h2{font-size:26px;margin:4px 0 9px}
+h3{margin:0 0 6px}
+p{color:#9da9a0;margin:6px 0 12px}
+button,select{font:inherit}
+button{cursor:pointer}
+.top{max-width:1200px;margin:auto;padding:32px 28px 25px;display:grid;grid-template-columns:1.05fr .95fr;gap:30px}
+.eyebrow,.section-label{color:#a47a4e;font-size:11px;letter-spacing:1.4px;text-transform:uppercase}
+.hero-text{max-width:600px}
+.hero-text p{font-size:15px;max-width:560px}
+.layers{margin-top:18px}
+.layer{display:flex;gap:12px;margin:9px 0;color:#adb6ad;font-size:13px}
+.layer b{color:#b88958;min-width:25px;font-size:11px}
+.upload-area{border:1px dashed #31564d;min-height:145px;display:flex;align-items:center;justify-content:center;text-align:center;background:#0b1c17;transition:.2s}
+.upload-area:hover,.upload-area.drag{border-color:#6da59a;background:#10251f}
+.file-label{display:block;width:100%;padding:40px 20px;cursor:pointer}
+.file-label strong{display:block;color:#d9ddd1;margin-bottom:6px}
+.file-label span{color:#7f938a;font-size:13px}
+#fileInput{display:none}
+.example-btn{width:100%;margin-top:8px;padding:9px;border:1px solid #31564d;background:transparent;color:#aebbb3;font-size:12px}
+.example-btn:hover{background:#10251f}
+.status{margin-top:8px;padding:8px 10px;border:1px solid #29463e;background:#0b1b17;font-size:12px;min-height:37px}
+.status.success{border-color:#397463;color:#91c8ae}
+.status.error{border-color:#774b42;color:#e49a83}
+.status.info{border-color:#536c64;color:#b4c5bd}
+section{border-top:1px solid #1d3730;padding:25px 28px}
+.section-inner{max-width:1200px;margin:auto}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid #31564d;background:#0b1d18}
+.stat{min-height:92px;padding:14px 16px;border-right:1px solid #31564d}
+.stat:last-child{border-right:0}
+.stat-label{color:#82938c;font-size:10px;text-transform:uppercase;letter-spacing:1px}
+.stat-value{margin-top:7px;font-family:Georgia,serif;font-size:25px;color:#e0ded0}
+.stat-small{color:#809089;font-size:10px}
+.saved{color:#6bb09e}
+.block-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:6px;margin-top:15px}
+.block{min-height:72px;padding:7px;border:1px solid #285047;background:#10251f;overflow:hidden}
+.block.corrupted{border-color:#8c4d3e;background:#241612}
+.block-hash{font-family:monospace;color:#a9c0b6;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.block-size,.block-ref{font-family:monospace;color:#8a9a91;font-size:9px;margin-top:2px}
+.flip-btn{margin-top:5px;width:100%;padding:3px;border:1px solid #765b39;background:transparent;color:#c69b62;font-size:9px}
+.flip-btn:hover{background:#241c13}
+.table-wrap{overflow-x:auto;margin-top:12px}
+table{width:100%;border-collapse:collapse;min-width:850px}
+th{color:#82928b;font-family:monospace;font-size:10px;text-align:left;padding:8px;border-bottom:1px solid #31564d;font-weight:normal}
+td{padding:9px 8px;border-bottom:1px solid #1d3730;color:#abb5ae;font-size:12px}
+.path{max-width:330px;word-break:break-all;font-family:monospace;color:#c5c9bd}
+.root{font-family:monospace;font-size:10px}
+.badge{display:inline-block;padding:3px 7px;border-radius:15px;background:#182d26;color:#98aaa1;font-family:monospace;font-size:9px}
+.badge.intact{color:#82c7a6;background:#102b20}
+.badge.corrupted{color:#df9279;background:#321b16}
+.actions{display:flex;gap:5px;flex-wrap:wrap}
+.action-btn{padding:5px 8px;border:1px solid #31564d;background:#0c1c18;color:#aebbb3;font-size:10px}
+.action-btn:hover{background:#183029}
+.action-btn.delete:hover{border-color:#8c5447;color:#dc9b87}
+.merkle-box,.avl-box{border:1px solid #31564d;background:#091913;overflow:hidden}
+.merkle-layout{display:flex;min-height:360px}
+.merkle-controls{width:220px;padding:14px;background:#0d241e;border-right:1px solid #31564d}
+.merkle-controls label{display:block;color:#8d9c94;font-family:monospace;font-size:10px;margin-bottom:5px}
+.merkle-controls select{width:100%;background:#112720;color:#cbd0c4;border:1px solid #31564d;padding:8px;font-size:10px}
+.verify-btn{width:100%;margin-top:9px;padding:8px;background:#102b24;color:#a8cabe;border:1px solid #426e61;font-size:11px}
+.verify-btn:hover{background:#17392f}
+.verify-result{margin-top:9px;font-family:monospace;font-size:9px}
+.verify-result.good{color:#79c39e}
+.verify-result.bad{color:#df8e77}
+.verify-main{flex:1;overflow:auto;position:relative;padding:8px}
+.tree-svg{display:block;min-width:700px}
+.tree-line{stroke:#31544b;stroke-width:1.2}
+.tree-node{fill:#10251f;stroke:#31564d;stroke-width:1}
+.tree-node.root-node{stroke:#71a99a}
+.tree-node.leaf-node{stroke:#8d744e}
+.tree-text{fill:#c6cec4;font-family:monospace;font-size:9px;text-anchor:middle}
+.tree-title{fill:#899a92;font-family:monospace;font-size:7px;text-anchor:middle}
+.avl-scroll{overflow-x:auto;overflow-y:hidden}
+.avl-svg{display:block;min-width:800px}
+.avl-line{stroke:#34554d;stroke-width:1.2}
+.avl-node{fill:#112820;stroke:#31564d;stroke-width:1}
+.avl-root{stroke:#6b9e91}
+.avl-height{fill:#8da097;font-family:monospace;font-size:7px;text-anchor:middle}
+.avl-path{fill:#abb8b0;font-family:monospace;font-size:7px;text-anchor:middle}
+.empty{padding:22px;text-align:center;color:#71827a;font-size:12px}
+.footer{max-width:1200px;margin:auto;padding:22px 28px 30px;display:grid;grid-template-columns:1fr 1fr;gap:30px}
+.footer p{font-size:11px;margin:3px 0}
+code{color:#b98c5c}
+@media(max-width:800px){
+.top{grid-template-columns:1fr;padding:25px 18px 20px;gap:20px}
+h1{font-size:38px}
+section{padding:20px 18px}
+.stats{grid-template-columns:repeat(2,1fr)}
+.stat{min-height:82px;border-bottom:1px solid #31564d}
+.stat:nth-child(2),.stat:nth-child(4){border-right:0}
+.merkle-layout{display:block;min-height:0}
+.merkle-controls{width:100%;border-right:0;border-bottom:1px solid #31564d}
+.footer{grid-template-columns:1fr;gap:15px;padding:20px 18px 25px}
+}
+</style>
+</head>
+<body>
+<header class="top">
+<div class="hero-text">
+<div class="eyebrow">CONTENT-ADDRESSED STORAGE, WITH SUPABASE</div>
+<h1>Every file has a<br>fingerprint.<br><span>Duplicates don't<br>get a second<br>drawer.</span></h1>
+<p>Drop files below and watch the storage engine hash every block, skip anything it already has, seal each file under a Merkle root, and keep paths balanced in an AVL tree.</p>
+<div class="layers">
+<div class="layer"><b>01</b><div><strong>Block store</strong> — SHA-256 hashing + reference counting</div></div>
+<div class="layer"><b>02</b><div><strong>Merkle tree</strong> — one root proves every block is intact</div></div>
+<div class="layer"><b>03</b><div><strong>Namespace</strong> — AVL tree keeps file paths sorted</div></div>
+</div>
+</div>
+<div>
+<div class="upload-area" id="dropArea">
+<input type="file" id="fileInput" multiple>
+<label for="fileInput" class="file-label"><strong>Drop files in the slot</strong><span>or click to choose — files are stored in the vault</span></label>
+</div>
+<button class="example-btn" id="exampleBtn">Load example files</button>
+<div id="status" class="status">Ready.</div>
+</div>
+</header>
+<section>
+<div class="section-inner">
+<div class="section-label">LEDGER TOTALS</div>
+<h2>What the vault has recorded</h2>
+<div class="stats">
+<div class="stat"><div class="stat-label">Files</div><div class="stat-value" id="statFiles">0</div><div class="stat-small">virtual paths</div></div>
+<div class="stat"><div class="stat-label">Unique Blocks</div><div class="stat-value" id="statBlocks">0</div><div class="stat-small">stored once each</div></div>
+<div class="stat"><div class="stat-label">Logical Size</div><div class="stat-value" id="statLogical">0 B</div><div class="stat-small">total file size</div></div>
+<div class="stat"><div class="stat-label">Physical Size</div><div class="stat-value" id="statPhysical">0 B</div><div class="stat-small">actual storage</div></div>
+<div class="stat"><div class="stat-label">Saved</div><div class="stat-value saved" id="statSaved">0%</div><div class="stat-small" id="statSavedBytes">0 B deduplicated</div></div>
+</div>
+</div>
+</section>
+<section>
+<div class="section-inner">
+<div class="section-label">LAYER 01 — CONTENT-ADDRESSABLE STORAGE</div>
+<h2>The block store</h2>
+<p>Every 64 KB chunk is hashed before it is kept. A hash already in the vault is never stored twice.</p>
+<div id="blockGrid" class="block-grid"></div>
+</div>
+</section>
+<section>
+<div class="section-inner">
+<div class="section-label">LAYER 03 — NAMESPACE</div>
+<h2>The file ledger</h2>
+<p>Each entry contains its ordered block hashes and Merkle root. Verify checks the stored blocks. Delete updates their references.</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Path</th><th>Size</th><th>Blocks</th><th>Merkle root</th><th>Status</th><th>Actions</th></tr></thead>
+<tbody id="ledgerBody"></tbody>
+</table>
+</div>
+</div>
+</section>
+<section>
+<div class="section-inner">
+<div class="section-label">LAYER 02 — INTEGRITY</div>
+<h2>Merkle tree & tamper check</h2>
+<p>Select a file to see its SHA-256 Merkle tree. Flip a bit in a block and verify the file to detect corruption.</p>
+<div class="merkle-box">
+<div class="merkle-layout">
+<div class="merkle-controls">
+<label for="merkleFile">FILE</label>
+<select id="merkleFile"></select>
+<button id="verifySelected" class="verify-btn">Verify integrity</button>
+<div id="verifyResult" class="verify-result"></div>
+</div>
+<div class="verify-main" id="merkleContainer"><div class="empty">Select a file to display its Merkle tree.</div></div>
+</div>
+</div>
+</div>
+</section>
+<section>
+<div class="section-inner">
+<div class="section-label">LAYER 03 — NAMESPACE, VISUALIZED</div>
+<h2>The AVL tree keeping paths sorted</h2>
+<p>File paths are inserted into a self-balancing AVL tree. Nodes show their height and parent-child relationships.</p>
+<div class="avl-box">
+<div class="avl-scroll">
+<div id="avlContainer"><div class="empty">No files in the ledger.</div></div>
+</div>
+</div>
+</div>
+</section>
+<footer class="footer">
+<div>
+<h3>How to read this page</h3>
+<p>The block store uses SHA-256 fingerprints and reference counts. The Merkle tree combines block hashes into one root. The AVL tree keeps file paths ordered and balanced.</p>
+</div>
+<div>
+<h3>Storage architecture</h3>
+<p>Metadata is stored in Supabase PostgreSQL and block bytes are stored in the private <code>ledger-blocks</code> bucket.</p>
+</div>
+</footer>
+<script>
+const API="/api";
+let state={files:[],blocks:[]};
+const fileInput=document.getElementById("fileInput");
+const dropArea=document.getElementById("dropArea");
+const statusBox=document.getElementById("status");
+const exampleBtn=document.getElementById("exampleBtn");
+const merkleFile=document.getElementById("merkleFile");
+const verifySelected=document.getElementById("verifySelected");
+
+function setStatus(message,type="info"){statusBox.textContent=message;statusBox.className="status "+type}
+
+function formatBytes(bytes){
+bytes=Number(bytes||0);
+if(bytes<1024)return bytes.toFixed(0)+" B";
+if(bytes<1024*1024)return(bytes/1024).toFixed(1)+" KB";
+if(bytes<1024*1024*1024)return(bytes/(1024*1024)).toFixed(2)+" MB";
+return(bytes/(1024*1024*1024)).toFixed(2)+" GB"
+}
+
+function shortHash(hash){return hash?hash.substring(0,12)+"…":"—"}
+
+function escapeHtml(value){return String(value??"").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;").replaceAll("'","&#039;")}
+
+async function loadState(){
+try{
+const response=await fetch(API+"/state");
+if(!response.ok)throw new Error("State request failed: "+response.status);
+state=await response.json();
+state.files=Array.isArray(state.files)?state.files:[];
+state.blocks=Array.isArray(state.blocks)?state.blocks:[];
+renderEverything()
+}catch(error){
+console.error(error);
+setStatus("Could not load vault state: "+error.message,"error")
+}
+}
+
+function renderEverything(){
+renderStats();
+renderBlocks();
+renderLedger();
+renderFileSelector();
+renderAVL();
+if(merkleFile.value)renderMerkle(merkleFile.value);
+else document.getElementById("merkleContainer").innerHTML='<div class="empty">Select a file to display its Merkle tree.</div>'
+}
+
+function renderStats(){
+let logical=0,physical=0;
+for(const file of state.files)logical+=Number(file.size||0);
+for(const block of state.blocks)physical+=Number(block.size||0);
+const saved=logical>0?Math.max(0,(1-physical/logical)*100):0;
+document.getElementById("statFiles").textContent=state.files.length;
+document.getElementById("statBlocks").textContent=state.blocks.length;
+document.getElementById("statLogical").textContent=formatBytes(logical);
+document.getElementById("statPhysical").textContent=formatBytes(physical);
+document.getElementById("statSaved").textContent=saved.toFixed(1)+"%";
+document.getElementById("statSavedBytes").textContent=formatBytes(Math.max(0,logical-physical))+" deduplicated"
+}
+
+function renderBlocks(){
+const container=document.getElementById("blockGrid");
+if(!state.blocks.length){
+container.innerHTML='<div class="empty">No blocks stored yet.</div>';
+return
+}
+container.innerHTML="";
+for(const block of state.blocks){
+const div=document.createElement("div");
+div.className="block "+(block.corrupted?"corrupted":"");
+const hashDiv=document.createElement("div");
+hashDiv.className="block-hash";
+hashDiv.textContent=shortHash(block.hash);
+const sizeDiv=document.createElement("div");
+sizeDiv.className="block-size";
+sizeDiv.textContent=formatBytes(block.size);
+const refDiv=document.createElement("div");
+refDiv.className="block-ref";
+refDiv.textContent="refs: "+Number(block.ref_count||0);
+const button=document.createElement("button");
+button.className="flip-btn";
+button.textContent="Flip a bit";
+button.addEventListener("click",async()=>{
+if(!confirm("Flip a bit in block "+shortHash(block.hash)+"?\n\nThis intentionally corrupts the stored block."))return;
+await corruptBlock(block.hash)
+});
+div.append(hashDiv,sizeDiv,refDiv,button);
+container.appendChild(div)
+}
+}
+
+function renderLedger(){
+const body=document.getElementById("ledgerBody");
+body.innerHTML="";
+if(!state.files.length){
+body.innerHTML='<tr><td colspan="6"><div class="empty">No files stored yet.</div></td></tr>';
+return
+}
+for(const file of state.files){
+const row=document.createElement("tr");
+const path=document.createElement("td");
+path.className="path";
+path.textContent=file.path||"";
+const size=document.createElement("td");
+size.textContent=formatBytes(file.size);
+const blocks=document.createElement("td");
+blocks.textContent=Array.isArray(file.block_hashes)?file.block_hashes.length:Number(file.blocks||0);
+const root=document.createElement("td");
+root.className="root";
+root.textContent=shortHash(file.merkle_root);
+const status=document.createElement("td");
+const badge=document.createElement("span");
+badge.className="badge";
+const fileStatus=String(file.status||"unverified").toLowerCase();
+badge.textContent=fileStatus;
+if(fileStatus==="intact")badge.classList.add("intact");
+if(fileStatus==="corrupted")badge.classList.add("corrupted");
+status.appendChild(badge);
+const actions=document.createElement("td");
+const actionDiv=document.createElement("div");
+actionDiv.className="actions";
+
+const inspect=document.createElement("button");
+inspect.className="action-btn";
+inspect.textContent="Inspect";
+inspect.addEventListener("click",()=>{
+merkleFile.value=file.path;
+renderMerkle(file.path);
+document.getElementById("merkleContainer").closest("section").scrollIntoView({behavior:"smooth"})
+});
+
+const verify=document.createElement("button");
+verify.className="action-btn";
+verify.textContent="Verify";
+verify.addEventListener("click",async()=>await verifyFile(file.path));
+
+const del=document.createElement("button");
+del.className="action-btn delete";
+del.textContent="Delete";
+del.addEventListener("click",async()=>await deleteFile(file.path));
+
+actionDiv.append(inspect,verify,del);
+actions.appendChild(actionDiv);
+row.append(path,size,blocks,root,status,actions);
+body.appendChild(row)
+}
+}
+
+function renderFileSelector(){
+const oldValue=merkleFile.value;
+merkleFile.innerHTML="";
+for(const file of state.files){
+const option=document.createElement("option");
+option.value=file.path;
+option.textContent=file.path;
+merkleFile.appendChild(option)
+}
+if(oldValue&&state.files.some(file=>file.path===oldValue))merkleFile.value=oldValue;
+else if(state.files.length)merkleFile.value=state.files[0].path
+}
+
+async function sha256(bytes){
+const digest=await crypto.subtle.digest("SHA-256",bytes);
+return new Uint8Array(digest)
+}
+
+function hexToBytes(hex){
+const result=new Uint8Array(hex.length/2);
+for(let i=0;i<result.length;i++)result[i]=parseInt(hex.substring(i*2,i*2+2),16);
+return result
+}
+
+function bytesToHex(bytes){
+return Array.from(bytes).map(byte=>byte.toString(16).padStart(2,"0")).join("")
+}
+
+async function hashPair(left,right){
+const a=hexToBytes(left),b=hexToBytes(right);
+const combined=new Uint8Array(a.length+b.length);
+combined.set(a,0);
+combined.set(b,a.length);
+return bytesToHex(await sha256(combined))
+}
+
+async function buildMerkleTree(hashes){
+if(!hashes.length)return{root:"",levels:[]};
+let current=[...hashes];
+const levels=[current];
+while(current.length>1){
+const next=[];
+for(let i=0;i<current.length;i+=2){
+const left=current[i];
+const right=current[i+1]||current[i];
+next.push(await hashPair(left,right))
+}
+current=next;
+levels.push(current)
+}
+return{root:current[0],levels}
+}
+
+async function renderMerkle(path){
+const container=document.getElementById("merkleContainer");
+const file=state.files.find(item=>item.path===path);
+if(!file){
+container.innerHTML='<div class="empty">File not found.</div>';
+return
+}
+const hashes=Array.isArray(file.block_hashes)?file.block_hashes:[];
+if(!hashes.length){
+container.innerHTML='<div class="empty">This file has no data blocks.</div>';
+return
+}
+container.innerHTML='<div class="empty">Building SHA-256 Merkle tree…</div>';
+try{
+const tree=await buildMerkleTree(hashes);
+const levels=tree.levels;
+const width=Math.max(720,hashes.length*105);
+const height=Math.max(330,levels.length*62+45);
+let svg=`<svg class="tree-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
+const positions=[];
+for(let level=0;level<levels.length;level++){
+const nodes=levels[level];
+const y=25+level*60;
+const spacing=width/(nodes.length+1);
+positions[level]=[];
+for(let i=0;i<nodes.length;i++)positions[level].push({x:spacing*(i+1),y})
+}
+for(let level=levels.length-1;level>0;level--){
+const children=positions[level],parents=positions[level-1];
+for(let i=0;i<children.length;i++){
+const parent=parents[Math.floor(i/2)],child=children[i];
+svg+=`<line class="tree-line" x1="${parent.x}" y1="${parent.y+21}" x2="${child.x}" y2="${child.y-21}"/>`
+}
+}
+for(let level=0;level<levels.length;level++){
+const nodes=levels[level];
+for(let i=0;i<nodes.length;i++){
+const hash=nodes[i],pos=positions[level][i];
+const isRoot=level===0,isLeaf=level===levels.length-1;
+const cls=isRoot?"tree-node root-node":isLeaf?"tree-node leaf-node":"tree-node";
+const title=isRoot?"ROOT":isLeaf?"BLOCK "+(i+1):"BRANCH";
+svg+=`<rect class="${cls}" x="${pos.x-43}" y="${pos.y-21}" width="86" height="42" rx="4"/>`;
+svg+=`<text class="tree-title" x="${pos.x}" y="${pos.y-7}">${title}</text>`;
+svg+=`<text class="tree-text" x="${pos.x}" y="${pos.y+9}">${shortHash(hash)}</text>`
+}
+}
+svg+="</svg>";
+container.innerHTML=svg;
+const result=document.getElementById("verifyResult");
+if(tree.root===file.merkle_root){
+result.className="verify-result good";
+result.textContent="✓ Root matches: "+shortHash(tree.root)
+}else{
+result.className="verify-result bad";
+result.textContent="✗ Root mismatch: calculated "+shortHash(tree.root)+" / stored "+shortHash(file.merkle_root)
+}
+}catch(error){
+console.error(error);
+container.innerHTML='<div class="empty">Could not build Merkle tree.</div>'
+}
+}
+
+function createAVL(paths){
+let root=null;
+function height(node){return node?node.height:0}
+function update(node){node.height=1+Math.max(height(node.left),height(node.right))}
+function balance(node){return node?height(node.left)-height(node.right):0}
+function rotateRight(y){
+const x=y.left,temp=x.right;
+x.right=y;
+y.left=temp;
+update(y);
+update(x);
+return x
+}
+function rotateLeft(x){
+const y=x.right,temp=y.left;
+y.left=x;
+x.right=temp;
+update(x);
+update(y);
+return y
+}
+function insert(node,path){
+if(!node)return{path,height:1,left:null,right:null};
+if(path<node.path)node.left=insert(node.left,path);
+else if(path>node.path)node.right=insert(node.right,path);
+else return node;
+update(node);
+const b=balance(node);
+if(b>1&&path<node.left.path)return rotateRight(node);
+if(b<-1&&path>node.right.path)return rotateLeft(node);
+if(b>1&&path>node.left.path){
+node.left=rotateLeft(node.left);
+return rotateRight(node)
+}
+if(b<-1&&path<node.right.path){
+node.right=rotateRight(node.right);
+return rotateLeft(node)
+}
+return node
+}
+for(const path of [...paths].sort())root=insert(root,path);
+return root
+}
+
+function renderAVL(){
+const container=document.getElementById("avlContainer");
+const paths=state.files.map(file=>file.path).filter(Boolean);
+if(!paths.length){
+container.innerHTML='<div class="empty">No files in the ledger.</div>';
+return
+}
+const root=createAVL(paths);
+const nodes=[];
+const width=Math.max(850,paths.length*145);
+function collect(node,depth,minX,maxX){
+if(!node)return;
+const x=(minX+maxX)/2,y=30+depth*82;
+nodes.push({node,x,y});
+collect(node.left,depth+1,minX,x);
+collect(node.right,depth+1,x,maxX)
+}
+collect(root,0,30,width-30);
+const maxY=Math.max(...nodes.map(item=>item.y));
+const height=Math.max(350,maxY+75);
+let svg=`<svg class="avl-svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">`;
+function findNode(node){return nodes.find(item=>item.node===node)}
+for(const item of nodes){
+const node=item.node;
+if(node.left){
+const child=findNode(node.left);
+svg+=`<line class="avl-line" x1="${item.x}" y1="${item.y+25}" x2="${child.x}" y2="${child.y-25}"/>`
+}
+if(node.right){
+const child=findNode(node.right);
+svg+=`<line class="avl-line" x1="${item.x}" y1="${item.y+25}" x2="${child.x}" y2="${child.y-25}"/>`
+}
+}
+for(const item of nodes){
+const node=item.node;
+const cls=node===root?"avl-node avl-root":"avl-node";
+svg+=`<rect class="${cls}" x="${item.x-58}" y="${item.y-25}" width="116" height="50" rx="5"/>`;
+svg+=`<text class="avl-height" x="${item.x}" y="${item.y-9}">h=${node.height}</text>`;
+let displayPath=node.path;
+if(displayPath.length>23)displayPath="…"+displayPath.substring(displayPath.length-22);
+svg+=`<text class="avl-path" x="${item.x}" y="${item.y+9}">${escapeHtml(displayPath)}</text>`
+}
+svg+="</svg>";
+container.innerHTML=svg
+}
+
+async function verifyFile(path){
+setStatus("Verifying "+path+"…","info");
+try{
+const response=await fetch(API+"/verify",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path})});
+const data=await response.json();
+if(!response.ok)throw new Error(data.error||data.details||"Verification failed");
+merkleFile.value=path;
+const result=document.getElementById("verifyResult");
+if(data.status==="INTACT"){
+result.className="verify-result good";
+result.textContent="✓ INTACT — blocks and Merkle root match.";
+setStatus("✓ "+path+" is intact.","success")
+}else{
+result.className="verify-result bad";
+result.textContent="✗ CORRUPTED — block or Merkle root mismatch.";
+setStatus("✗ "+path+" is corrupted.","error")
+}
+await loadState();
+merkleFile.value=path;
+await renderMerkle(path)
+}catch(error){
+console.error(error);
+setStatus("Verification failed: "+error.message,"error")
+}
+}
+
+async function deleteFile(path){
+if(!confirm("Delete this file?\n\n"+path+"\n\nUnused blocks will also be removed."))return;
+setStatus("Deleting "+path+"…","info");
+try{
+const response=await fetch(API+"/delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path})});
+const data=await response.json();
+if(!response.ok)throw new Error(data.error||data.details||"Delete failed");
+setStatus("✓ File deleted.","success");
+await loadState()
+}catch(error){
+console.error(error);
+setStatus("Delete failed: "+error.message,"error")
+}
+}
+
+async function corruptBlock(hash){
+setStatus("Flipping a bit in block "+shortHash(hash)+"…","info");
+try{
+const response=await fetch(API+"/corrupt",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({hash})});
+const data=await response.json();
+if(!response.ok)throw new Error(data.error||data.details||"Corruption failed");
+setStatus("✓ Bit flipped. Verify the affected file.","success");
+await loadState()
+}catch(error){
+console.error(error);
+setStatus("Flip-bit failed: "+error.message,"error")
+}
+}
+
+async function uploadFiles(files){
+if(!files||!files.length){
+setStatus("No files selected.","error");
+return
+}
+for(const file of files){
+try{
+setStatus("Uploading "+file.name+"…","info");
+const formData=new FormData();
+formData.append("file",file);
+const response=await fetch(API+"/upload",{method:"POST",body:formData});
+const data=await response.json();
+if(!response.ok)throw new Error(data.error||data.details||"Upload failed");
+setStatus("✓ Uploaded "+file.name,"success")
+}catch(error){
+console.error(error);
+setStatus("Upload failed for "+file.name+": "+error.message,"error")
+}
+}
+await loadState()
+}
+
+fileInput.addEventListener("change",async function(){
+await uploadFiles(Array.from(this.files));
+this.value=""
+});
+
+dropArea.addEventListener("dragover",event=>{
+event.preventDefault();
+dropArea.classList.add("drag")
+});
+
+dropArea.addEventListener("dragleave",()=>{
+dropArea.classList.remove("drag")
+});
+
+dropArea.addEventListener("drop",async event=>{
+event.preventDefault();
+dropArea.classList.remove("drag");
+await uploadFiles(Array.from(event.dataTransfer.files))
+});
+
+exampleBtn.addEventListener("click",async()=>{
+const examples=[
+new File(["The Ledger example file.\n".repeat(200)],"example-report.txt",{type:"text/plain"}),
+new File(["The Ledger example file.\n".repeat(200)],"example-report-copy.txt",{type:"text/plain"}),
+new File(["A second example document.\n".repeat(150)],"example-notes.txt",{type:"text/plain"})
+];
+await uploadFiles(examples)
+});
+
+merkleFile.addEventListener("change",async()=>{
+await renderMerkle(merkleFile.value)
+});
+
+verifySelected.addEventListener("click",async()=>{
+if(!merkleFile.value){
+setStatus("Select a file first.","error");
+return
+}
+await verifyFile(merkleFile.value)
+});
+
+loadState();
+</script>
+</body>
+</html>
