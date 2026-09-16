@@ -6,14 +6,14 @@ from supabase import create_client
 
 
 # ============================================================
-# FLASK APP
+# FLASK
 # ============================================================
 
 app = Flask(__name__, static_folder=None)
 
 
 # ============================================================
-# SUPABASE CONFIGURATION
+# SUPABASE
 # ============================================================
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -24,34 +24,41 @@ SUPABASE_KEY = (
 )
 
 if not SUPABASE_URL:
-    raise RuntimeError("SUPABASE_URL is not set in Vercel environment variables.")
+    raise RuntimeError("SUPABASE_URL is not set.")
 
 if not SUPABASE_KEY:
-    raise RuntimeError(
-        "SUPABASE_SECRET_KEY is not set in Vercel environment variables."
-    )
+    raise RuntimeError("SUPABASE_SECRET_KEY is not set.")
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase = create_client(
+    SUPABASE_URL,
+    SUPABASE_KEY
+)
 
-BUCKET = os.environ.get("SUPABASE_BUCKET", "ledger-blocks")
+BUCKET = os.environ.get(
+    "SUPABASE_BUCKET",
+    "ledger-blocks"
+)
 
 
 # ============================================================
-# HELPER FUNCTIONS
+# HASHING
 # ============================================================
 
 def sha256(data):
-    """Return SHA-256 hash of bytes."""
     return hashlib.sha256(data).hexdigest()
 
 
 def hash_pair(left, right):
-    """Hash two Merkle tree nodes together."""
-    return sha256((left + right).encode("utf-8"))
+    return sha256(
+        (left + right).encode("utf-8")
+    )
 
+
+# ============================================================
+# MERKLE TREE
+# ============================================================
 
 def merkle_root(hashes):
-    """Calculate Merkle root from a list of block hashes."""
 
     if not hashes:
         return None
@@ -60,15 +67,18 @@ def merkle_root(hashes):
 
     while len(level) > 1:
 
-        # Duplicate last node when number of nodes is odd
         if len(level) % 2 != 0:
             level.append(level[-1])
 
         next_level = []
 
         for i in range(0, len(level), 2):
+
             next_level.append(
-                hash_pair(level[i], level[i + 1])
+                hash_pair(
+                    level[i],
+                    level[i + 1]
+                )
             )
 
         level = next_level
@@ -76,8 +86,11 @@ def merkle_root(hashes):
     return level[0]
 
 
+# ============================================================
+# FORMAT SIZE
+# ============================================================
+
 def fmt(n):
-    """Format bytes into readable units."""
 
     n = int(n)
 
@@ -90,8 +103,11 @@ def fmt(n):
     return f"{n / (1024 * 1024):.2f} MB"
 
 
+# ============================================================
+# DATABASE HELPERS
+# ============================================================
+
 def get_files():
-    """Get all files from ledger_files."""
 
     response = (
         supabase
@@ -105,7 +121,6 @@ def get_files():
 
 
 def get_blocks():
-    """Get all blocks from ledger_blocks."""
 
     response = (
         supabase
@@ -119,18 +134,13 @@ def get_blocks():
 
 
 def get_block(hash_value):
-    """
-    Find a block by SHA-256 hash.
-
-    This intentionally does NOT use maybe_single(),
-    because the deployed Supabase client previously
-    produced a NoneType error with that method.
-    """
 
     response = (
         supabase
         .table("ledger_blocks")
-        .select("hash,ref_count,size,corrupted")
+        .select(
+            "hash,ref_count,size,corrupted"
+        )
         .eq("hash", hash_value)
         .limit(1)
         .execute()
@@ -138,7 +148,7 @@ def get_block(hash_value):
 
     rows = response.data or []
 
-    if len(rows) == 0:
+    if not rows:
         return None
 
     return rows[0]
@@ -150,12 +160,6 @@ def get_block(hash_value):
 
 @app.get("/")
 def home():
-    """
-    Serve index.html from the repository root.
-
-    Your GitHub structure currently has index.html
-    beside app.py, so we serve it directly from here.
-    """
 
     return send_from_directory(
         os.path.dirname(__file__),
@@ -164,7 +168,7 @@ def home():
 
 
 # ============================================================
-# STATE API
+# STATE
 # ============================================================
 
 @app.get("/api/state")
@@ -185,9 +189,11 @@ def state():
             for b in blocks
         )
 
-        saved = max(logical - physical, 0)
+        saved = max(
+            logical - physical,
+            0
+        )
 
-        # Simple representation of the namespace
         avl = sorted(
             [
                 {
@@ -200,36 +206,50 @@ def state():
         )
 
         return jsonify({
+
             "stats": {
+
                 "files": len(files),
+
                 "unique_blocks": len(blocks),
+
                 "logical_size": fmt(logical),
+
                 "physical_size": fmt(physical),
+
                 "saved_bytes": fmt(saved),
-                "saved_percent": (
-                    round(saved / logical * 100, 1)
+
+                "saved_percent":
+                    round(
+                        saved / logical * 100,
+                        1
+                    )
                     if logical
                     else 0
-                )
             },
 
             "blocks": blocks,
+
             "files": files,
+
             "avl": avl
         })
 
     except Exception as e:
 
-        print("STATE ERROR:", repr(e))
+        print(
+            "STATE ERROR:",
+            repr(e)
+        )
 
         return jsonify({
-            "error": "Could not load Ledger state",
+            "error": "Could not load state",
             "details": str(e)
         }), 500
 
 
 # ============================================================
-# UPLOAD API
+# UPLOAD
 # ============================================================
 
 @app.post("/api/upload")
@@ -237,87 +257,99 @@ def upload():
 
     try:
 
-        # ----------------------------------------------------
-        # Get uploaded file
-        # ----------------------------------------------------
+        # ------------------------------------------------------
+        # GET FILE
+        # ------------------------------------------------------
 
         f = request.files.get("file")
 
         if not f:
+
             return jsonify({
                 "error": "No file supplied"
             }), 400
 
         filename = f.filename or "unnamed_file"
 
-        # Replace spaces in filename
-        safe_filename = filename.replace(" ", "_")
+        safe_filename = filename.replace(
+            " ",
+            "_"
+        )
 
-        # Read file
         data = f.read()
 
         print(
-            f"UPLOAD START: {filename} "
-            f"({len(data)} bytes)"
+            "UPLOAD:",
+            filename,
+            "SIZE:",
+            len(data)
         )
 
-        # ----------------------------------------------------
-        # Split file into 64 KB blocks
-        # ----------------------------------------------------
+        # ------------------------------------------------------
+        # CHUNKING
+        # ------------------------------------------------------
 
         CHUNK_SIZE = 64 * 1024
 
         hashes = []
 
-        for i in range(0, len(data), CHUNK_SIZE):
+        for i in range(
+            0,
+            len(data),
+            CHUNK_SIZE
+        ):
 
-            chunk = data[i:i + CHUNK_SIZE]
+            chunk = data[
+                i:i + CHUNK_SIZE
+            ]
 
-            # Calculate content hash
+            # SHA-256
             h = sha256(chunk)
 
             hashes.append(h)
 
             print(
-                f"BLOCK: {h} "
-                f"({len(chunk)} bytes)"
+                "BLOCK HASH:",
+                h
             )
 
-            # ------------------------------------------------
-            # Check whether block already exists
-            # ------------------------------------------------
+            # --------------------------------------------------
+            # CHECK EXISTING BLOCK
+            # --------------------------------------------------
 
             existing = get_block(h)
 
             if existing:
 
                 print(
-                    f"BLOCK EXISTS: {h}, "
-                    f"ref_count={existing['ref_count']}"
+                    "BLOCK ALREADY EXISTS"
                 )
 
-                # Increase reference count
                 new_ref_count = (
-                    int(existing["ref_count"]) + 1
+                    int(
+                        existing["ref_count"]
+                    ) + 1
                 )
 
-                supabase \
-                    .table("ledger_blocks") \
+                (
+                    supabase
+                    .table("ledger_blocks")
                     .update({
-                        "ref_count": new_ref_count
-                    }) \
-                    .eq("hash", h) \
+                        "ref_count":
+                            new_ref_count
+                    })
+                    .eq("hash", h)
                     .execute()
+                )
 
             else:
 
                 print(
-                    f"NEW BLOCK: uploading {h} "
-                    f"to Supabase Storage"
+                    "NEW BLOCK - UPLOADING"
                 )
 
                 # ------------------------------------------------
-                # Upload block to Supabase Storage
+                # STORAGE UPLOAD
                 # ------------------------------------------------
 
                 supabase \
@@ -328,40 +360,41 @@ def upload():
                         chunk,
                         {
                             "content-type":
-                                "application/octet-stream",
-                            "upsert": "true"
+                                "application/octet-stream"
                         }
                     )
 
                 print(
-                    f"STORAGE UPLOAD SUCCESS: {h}"
+                    "STORAGE UPLOAD OK:",
+                    h
                 )
 
                 # ------------------------------------------------
-                # Insert block metadata into database
+                # DATABASE RECORD
                 # ------------------------------------------------
 
-                supabase \
-                    .table("ledger_blocks") \
+                (
+                    supabase
+                    .table("ledger_blocks")
                     .insert({
                         "hash": h,
                         "size": len(chunk),
                         "ref_count": 1,
                         "corrupted": False
-                    }) \
+                    })
                     .execute()
-
-                print(
-                    f"DATABASE INSERT SUCCESS: {h}"
                 )
 
-        # ----------------------------------------------------
-        # Handle empty files
-        # ----------------------------------------------------
+                print(
+                    "BLOCK DATABASE RECORD OK:",
+                    h
+                )
+
+        # ======================================================
+        # EMPTY FILE
+        # ======================================================
 
         if not hashes:
-
-            print("EMPTY FILE")
 
             h = sha256(b"")
 
@@ -372,16 +405,21 @@ def upload():
             if existing:
 
                 new_ref_count = (
-                    int(existing["ref_count"]) + 1
+                    int(
+                        existing["ref_count"]
+                    ) + 1
                 )
 
-                supabase \
-                    .table("ledger_blocks") \
+                (
+                    supabase
+                    .table("ledger_blocks")
                     .update({
-                        "ref_count": new_ref_count
-                    }) \
-                    .eq("hash", h) \
+                        "ref_count":
+                            new_ref_count
+                    })
+                    .eq("hash", h)
                     .execute()
+                )
 
             else:
 
@@ -393,28 +431,29 @@ def upload():
                         b"",
                         {
                             "content-type":
-                                "application/octet-stream",
-                            "upsert": True
+                                "application/octet-stream"
                         }
                     )
 
-                supabase \
-                    .table("ledger_blocks") \
+                (
+                    supabase
+                    .table("ledger_blocks")
                     .insert({
                         "hash": h,
                         "size": 0,
                         "ref_count": 1,
                         "corrupted": False
-                    }) \
+                    })
                     .execute()
+                )
 
-        # ----------------------------------------------------
-        # Generate file path
-        # ----------------------------------------------------
+        # ======================================================
+        # FILE PATH
+        # ======================================================
 
-        current_files = get_files()
+        files = get_files()
 
-        count = len(current_files) + 1
+        count = len(files) + 1
 
         path = (
             f"/uploads/"
@@ -422,31 +461,34 @@ def upload():
             f"{safe_filename}"
         )
 
-        # ----------------------------------------------------
-        # Calculate Merkle root
-        # ----------------------------------------------------
+        # ======================================================
+        # MERKLE ROOT
+        # ======================================================
 
         root = merkle_root(hashes)
 
-        # ----------------------------------------------------
-        # Create file record
-        # ----------------------------------------------------
+        # ======================================================
+        # FILE RECORD
+        # ======================================================
 
         entry = {
+
             "name": filename,
+
             "path": path,
+
             "size": len(data),
+
             "blocks": len(hashes),
+
             "block_hashes": hashes,
+
             "merkle_root": root,
+
             "status": "unverified"
         }
 
-        # ----------------------------------------------------
-        # Insert file record
-        # ----------------------------------------------------
-
-        result = (
+        (
             supabase
             .table("ledger_files")
             .insert(entry)
@@ -454,15 +496,16 @@ def upload():
         )
 
         print(
-            f"FILE INSERT SUCCESS: {path}"
+            "FILE CREATED:",
+            path
         )
 
-        return jsonify(entry), 200
+        return jsonify(entry)
 
     except Exception as e:
 
         print(
-            "========================================"
+            "================================"
         )
 
         print(
@@ -471,17 +514,20 @@ def upload():
         )
 
         print(
-            "========================================"
+            "================================"
         )
 
         return jsonify({
+
             "error": "Upload failed",
+
             "details": str(e)
+
         }), 500
 
 
 # ============================================================
-# VERIFY API
+# VERIFY
 # ============================================================
 
 @app.post("/api/verify")
@@ -489,16 +535,22 @@ def verify():
 
     try:
 
-        body = request.get_json(silent=True) or {}
+        body = (
+            request.get_json(
+                silent=True
+            )
+            or {}
+        )
 
         path = body.get("path")
 
         if not path:
+
             return jsonify({
-                "error": "File path is required"
+                "error":
+                    "File path is required"
             }), 400
 
-        # Find file
         response = (
             supabase
             .table("ledger_files")
@@ -511,15 +563,16 @@ def verify():
         rows = response.data or []
 
         if not rows:
+
             return jsonify({
-                "error": "File not found"
+                "error":
+                    "File not found"
             }), 404
 
         entry = rows[0]
 
-        current = []
+        current_hashes = []
 
-        # Recalculate every block hash
         for h in entry["block_hashes"]:
 
             raw = (
@@ -529,43 +582,65 @@ def verify():
                 .download(h)
             )
 
-            current.append(
+            current_hashes.append(
                 sha256(raw)
             )
 
-        # Recalculate Merkle root
-        root = merkle_root(current)
+        new_root = merkle_root(
+            current_hashes
+        )
 
-        recorded_root = entry["merkle_root"]
+        recorded_root = (
+            entry["merkle_root"]
+        )
 
-        ok = root == recorded_root
+        ok = (
+            new_root ==
+            recorded_root
+        )
 
-        # Find corrupted blocks
         bad_blocks = [
-            original_hash
-            for original_hash, recomputed_hash
-            in zip(entry["block_hashes"], current)
-            if original_hash != recomputed_hash
+
+            original
+
+            for original, current
+
+            in zip(
+                entry["block_hashes"],
+                current_hashes
+            )
+
+            if original != current
         ]
 
-        # Update status
-        supabase \
-            .table("ledger_files") \
+        (
+            supabase
+            .table("ledger_files")
             .update({
                 "status":
                     "verified intact"
                     if ok
-                    else "tamper detected"
-            }) \
-            .eq("path", path) \
+                    else
+                    "tamper detected"
+            })
+            .eq("path", path)
             .execute()
+        )
 
         return jsonify({
+
             "ok": ok,
+
             "path": path,
-            "recorded_root": recorded_root,
-            "recomputed_root": root,
-            "bad_blocks": bad_blocks
+
+            "recorded_root":
+                recorded_root,
+
+            "recomputed_root":
+                new_root,
+
+            "bad_blocks":
+                bad_blocks
         })
 
     except Exception as e:
@@ -576,13 +651,18 @@ def verify():
         )
 
         return jsonify({
-            "error": "Verification failed",
-            "details": str(e)
+
+            "error":
+                "Verification failed",
+
+            "details":
+                str(e)
+
         }), 500
 
 
 # ============================================================
-# DELETE API
+# DELETE
 # ============================================================
 
 @app.post("/api/delete")
@@ -590,16 +670,22 @@ def delete():
 
     try:
 
-        body = request.get_json(silent=True) or {}
+        body = (
+            request.get_json(
+                silent=True
+            )
+            or {}
+        )
 
         path = body.get("path")
 
         if not path:
+
             return jsonify({
-                "error": "File path is required"
+                "error":
+                    "File path is required"
             }), 400
 
-        # Find file
         response = (
             supabase
             .table("ledger_files")
@@ -612,13 +698,14 @@ def delete():
         rows = response.data or []
 
         if not rows:
+
             return jsonify({
-                "error": "File not found"
+                "error":
+                    "File not found"
             }), 404
 
         entry = rows[0]
 
-        # Process every block
         for h in entry["block_hashes"]:
 
             block = get_block(h)
@@ -627,50 +714,51 @@ def delete():
                 continue
 
             new_ref_count = (
-                int(block["ref_count"]) - 1
+                int(
+                    block["ref_count"]
+                ) - 1
             )
 
             if new_ref_count <= 0:
 
-                # Remove from Storage
-                try:
-
-                    supabase \
-                        .storage \
-                        .from_(BUCKET) \
-                        .remove([h])
-
-                except Exception as storage_error:
-
-                    print(
-                        "STORAGE DELETE WARNING:",
-                        repr(storage_error)
-                    )
+                # Remove Storage object
+                (
+                    supabase
+                    .storage
+                    .from_(BUCKET)
+                    .remove([h])
+                )
 
                 # Remove database record
-                supabase \
-                    .table("ledger_blocks") \
-                    .delete() \
-                    .eq("hash", h) \
+                (
+                    supabase
+                    .table("ledger_blocks")
+                    .delete()
+                    .eq("hash", h)
                     .execute()
+                )
 
             else:
 
-                # Decrease reference count
-                supabase \
-                    .table("ledger_blocks") \
+                (
+                    supabase
+                    .table("ledger_blocks")
                     .update({
-                        "ref_count": new_ref_count
-                    }) \
-                    .eq("hash", h) \
+                        "ref_count":
+                            new_ref_count
+                    })
+                    .eq("hash", h)
                     .execute()
+                )
 
-        # Delete file record
-        supabase \
-            .table("ledger_files") \
-            .delete() \
-            .eq("path", path) \
+        # Delete file
+        (
+            supabase
+            .table("ledger_files")
+            .delete()
+            .eq("path", path)
             .execute()
+        )
 
         return jsonify({
             "deleted": path
@@ -684,13 +772,18 @@ def delete():
         )
 
         return jsonify({
-            "error": "Delete failed",
-            "details": str(e)
+
+            "error":
+                "Delete failed",
+
+            "details":
+                str(e)
+
         }), 500
 
 
 # ============================================================
-# CORRUPT API
+# CORRUPT BLOCK
 # ============================================================
 
 @app.post("/api/corrupt")
@@ -698,61 +791,77 @@ def corrupt():
 
     try:
 
-        body = request.get_json(silent=True) or {}
+        body = (
+            request.get_json(
+                silent=True
+            )
+            or {}
+        )
 
         h = body.get("hash")
 
         if not h:
+
             return jsonify({
-                "error": "Block hash is required"
+                "error":
+                    "Block hash is required"
             }), 400
 
         # Download block
         raw = bytearray(
+
             supabase
             .storage
             .from_(BUCKET)
             .download(h)
+
         )
 
         if not raw:
 
             return jsonify({
                 "ok": False,
-                "error": "Block is empty"
+                "error":
+                    "Block is empty"
             })
 
-        # Modify one byte
+        # Change first byte
         raw[0] ^= 0b00010000
 
         # Remove old object
-        supabase \
-            .storage \
-            .from_(BUCKET) \
+        (
+            supabase
+            .storage
+            .from_(BUCKET)
             .remove([h])
+        )
 
         # Upload corrupted object
-        supabase \
-            .storage \
-            .from_(BUCKET) \
+        # NO UPSERT NEEDED
+        (
+            supabase
+            .storage
+            .from_(BUCKET)
             .upload(
                 h,
                 bytes(raw),
                 {
                     "content-type":
-                        "application/octet-stream",
-                    "upsert": True
+                        "application/octet-stream"
                 }
             )
+        )
 
-        # Mark block corrupted
-        supabase \
-            .table("ledger_blocks") \
+        # Mark corrupted
+        (
+            supabase
+            .table("ledger_blocks")
             .update({
                 "corrupted": True
-            }) \
-            .eq("hash", h) \
+            })
+            .eq("hash", h)
             .execute()
+        )
 
         return jsonify({
             "ok": True,
@@ -767,13 +876,18 @@ def corrupt():
         )
 
         return jsonify({
-            "error": "Corruption operation failed",
-            "details": str(e)
+
+            "error":
+                "Corruption operation failed",
+
+            "details":
+                str(e)
+
         }), 500
 
 
 # ============================================================
-# LOCAL DEVELOPMENT
+# LOCAL RUN
 # ============================================================
 
 if __name__ == "__main__":
