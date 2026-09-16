@@ -329,7 +329,7 @@ def upload():
                         {
                             "content-type":
                                 "application/octet-stream",
-                            "upsert": True
+                            "upsert": "true"
                         }
                     )
 
